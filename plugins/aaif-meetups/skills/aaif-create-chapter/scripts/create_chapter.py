@@ -1,0 +1,306 @@
+#!/usr/bin/env python3
+"""Create a new AAIF city chapter by cloning the TemplateCity folder and
+rebranding every Office file from "San Francisco" to the new city.
+
+Two replacement tokens are swapped (event content like dates/speakers is left
+untouched - organizers fill that per-event using the SKILLS.md prompts):
+
+  1. City name   "San Francisco" / "SAN FRANCISCO"  -> new city (case matched)
+                 plus the "SF" abbreviation (AAIF SF, SF CHAPTER, ...) -> new
+                 city, upper-cased in all-caps contexts and Title-cased in prose.
+  2. Luma slug   aaif-sanfrancisco / aaif-sf         -> aaif-<newslug>
+
+Usage:
+  # Dry run - show what would happen, create nothing:
+  python create_chapter.py --city "New York" --dry-run
+
+  # Create the chapter in Drive:
+  python create_chapter.py --city "New York"
+
+  # Override the Luma slug (e.g. Denver's page lives at aaif-colorado):
+  python create_chapter.py --city "Denver" --slug colorado
+
+  # Test the text engine on a local folder of .pptx/.docx/.xlsx (no Drive):
+  python create_chapter.py --city "Los Angeles" --rebrand-local ./somedir
+"""
+import argparse, html, json, os, re, subprocess, sys, time, unicodedata, urllib.request, zipfile
+
+CHAPTERS_PARENT = "1IQ1K7aVOKUUkxAcfLuNjdETEnmavvtjx"   # the "Chapters" Drive folder
+TEMPLATE_FOLDER = "1PHvEgqnHo0RrsFyA47O9iRJGaKehC8Eg"   # the "TemplateCity" folder
+SOURCE_NAME, SOURCE_UPPER = "San Francisco", "SAN FRANCISCO"
+
+PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+FOLDER = "application/vnd.google-apps.folder"
+MIME_BY_EXT = {".pptx": PPTX, ".docx": DOCX, ".xlsx": XLSX}
+
+# ----------------------------------------------------------------------------
+# Text rebranding engine (pure, unit-testable)
+# ----------------------------------------------------------------------------
+def slugify(city):
+    s = unicodedata.normalize("NFKD", city).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+def transform_text(text, name, upper, newslug):
+    """Apply all city/slug replacements to one piece of *plain* text."""
+    # 1. Luma slug (before the bare-SF pass, since it owns the '-SF' form)
+    def luma(m):
+        return ("AAIF-" + newslug.upper()) if m.group(0).isupper() else ("aaif-" + newslug)
+    text = re.sub(r"(?i)aaif-(?:sanfrancisco|sf)\b", luma, text)
+    # 2. Full city name
+    text = text.replace(SOURCE_NAME, name).replace(SOURCE_UPPER, upper)
+    # 3. Bare "SF" abbreviation - case decided by surrounding words
+    def sf(m):
+        after = text[m.end(): m.end() + 30]
+        before = text[max(0, m.start() - 30): m.start()]
+        nxt = re.search(r"[A-Za-z]{2,}", after)
+        nxt = nxt.group(0) if nxt else ""
+        prevs = re.findall(r"[A-Za-z]{2,}", before)
+        prev = prevs[-1] if prevs else ""
+        up = nxt.isupper() if nxt else (prev.isupper() if prev else False)
+        return upper if up else name
+    text = re.sub(r"\bSF\b", sf, text)
+    return text
+
+def _process_paragraphs(xml, ptag, ttag, tx):
+    """Concatenate the text runs in each paragraph, transform, and write the
+    result back into the first run (emptying the rest) so formatting and any
+    run-splitting are preserved."""
+    pre = re.compile(r"<%s\b[^>]*>.*?</%s>" % (re.escape(ptag), re.escape(ptag)), re.S)
+    tre = re.compile(r"(<%s\b[^>]*>)(.*?)(</%s>)" % (re.escape(ttag), re.escape(ttag)), re.S)
+
+    def do_para(pm):
+        block = pm.group(0)
+        runs = list(tre.finditer(block))
+        if not runs:
+            return block
+        concat = "".join(html.unescape(r.group(2)) for r in runs)
+        new = tx(concat)
+        if new == concat:
+            return block
+        new_esc = html.escape(new, quote=False)
+        out, last, first = [], 0, True
+        for r in runs:
+            out.append(block[last:r.start()])
+            open_, _txt, close = r.group(1), r.group(2), r.group(3)
+            if first:
+                if "xml:space" not in open_:
+                    open_ = open_[:-1] + ' xml:space="preserve">'
+                out.append(open_ + new_esc + close)
+                first = False
+            else:
+                out.append(open_ + close)
+            last = r.end()
+        out.append(block[last:])
+        return "".join(out)
+
+    return pre.sub(do_para, xml)
+
+def rebrand_part(part_name, data, name, upper, newslug):
+    """Return rebranded bytes for one OOXML part (or the original if unchanged)."""
+    tx = lambda s: transform_text(s, name, upper, newslug)
+    try:
+        xml = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    if re.match(r"ppt/slides/slide\d+\.xml$", part_name):
+        xml = _process_paragraphs(xml, "a:p", "a:t", tx)
+    elif part_name == "word/document.xml":
+        xml = _process_paragraphs(xml, "w:p", "w:t", tx)
+    elif part_name == "xl/sharedStrings.xml":
+        xml = _process_paragraphs(xml, "si", "t", tx)
+    elif part_name in ("docProps/core.xml", "docProps/app.xml"):
+        # metadata: chapter labelled "AAIF SF" -> "AAIF <UPPER>"
+        xml = xml.replace("AAIF SF", "AAIF " + upper)
+        xml = xml.replace(SOURCE_NAME, name).replace(SOURCE_UPPER, upper)
+        xml = re.sub(r"(?i)aaif-(?:sanfrancisco|sf)\b",
+                     lambda m: ("AAIF-" + newslug.upper()) if m.group(0).isupper() else ("aaif-" + newslug), xml)
+    elif part_name.endswith(".rels"):
+        # hyperlink targets to the Luma page
+        xml = re.sub(r"(?i)aaif-(?:sanfrancisco|sf)\b",
+                     lambda m: ("AAIF-" + newslug.upper()) if m.group(0).isupper() else ("aaif-" + newslug), xml)
+    else:
+        return data
+    return xml.encode("utf-8")
+
+def rebrand_file(path, name, upper, newslug):
+    """Rewrite an .pptx/.docx/.xlsx in place. Returns number of parts changed."""
+    tmp = path + ".new"
+    zin = zipfile.ZipFile(path, "r")
+    zout = zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED)
+    changed = 0
+    for it in zin.infolist():
+        data = zin.read(it.filename)
+        new = rebrand_part(it.filename, data, name, upper, newslug)
+        if new != data:
+            changed += 1
+        zi = zipfile.ZipInfo(it.filename, date_time=it.date_time)
+        zi.compress_type = it.compress_type
+        zi.external_attr = it.external_attr
+        zout.writestr(zi, new)
+    zin.close(); zout.close()
+    if zipfile.ZipFile(tmp).testzip() is not None:
+        os.remove(tmp); raise RuntimeError("repackaged zip failed validation: " + path)
+    os.replace(tmp, path)
+    return changed
+
+def residual_tokens(path):
+    """List any stale San Francisco / SF / aaif-sf tokens still present."""
+    z = zipfile.ZipFile(path); hits = []
+    for n in z.namelist():
+        if not n.endswith((".xml", ".rels")):
+            continue
+        d = z.read(n)
+        for pat in (rb"San Francisco", rb"SAN FRANCISCO", rb"aaif-sf(?![a-z])", rb"\bSF\b"):
+            if re.search(pat, d, re.I):
+                hits.append((n.split("/")[-1], pat.decode("latin1")))
+    return hits
+
+# ----------------------------------------------------------------------------
+# Drive helpers (via the gws CLI)
+# ----------------------------------------------------------------------------
+_TRANSIENT = ("timed out", "internalError", "HTTP request failed",
+              "Connection", "temporarily", "rateLimit", "userRateLimit",
+              "backendError", "503", "500", "502")
+
+def _gws(cmd, cwd=None, retries=5):
+    """Run a gws command, retrying transient network/server errors."""
+    for i in range(retries):
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+        if r.returncode == 0:
+            return r.stdout
+        msg = (r.stderr or "") + (r.stdout or "")
+        if i < retries - 1 and any(k in msg for k in _TRANSIENT):
+            time.sleep(2 * (i + 1))
+            continue
+        raise RuntimeError("gws failed (%s): %s" % (r.returncode, msg.strip()[:400]))
+
+def gws_json(*args, params=None, body=None):
+    cmd = ["gws", *args]
+    if params is not None:
+        cmd += ["--params", json.dumps(params)]
+    if body is not None:
+        cmd += ["--json", json.dumps(body)]
+    out = _gws(cmd)
+    s = "\n".join(l for l in out.splitlines() if "keyring backend" not in l)
+    return json.loads(s) if s.strip() else {}
+
+def gws_download(file_id, out):
+    # gws rejects --output paths outside its cwd, so run it in the file's dir.
+    d = os.path.dirname(out) or "."
+    _gws(["gws", "drive", "files", "get", "--params",
+          json.dumps({"fileId": file_id, "supportsAllDrives": True, "alt": "media"}),
+          "--output", os.path.basename(out)], cwd=d)
+
+def gws_upload(file_id, path, mime):
+    d = os.path.dirname(path) or "."
+    _gws(["gws", "drive", "files", "update", "--params",
+          json.dumps({"fileId": file_id, "supportsAllDrives": True}),
+          "--upload", os.path.basename(path), "--upload-content-type", mime], cwd=d)
+
+def list_children(folder_id):
+    res = gws_json("drive", "files", "list", params={
+        "q": "'%s' in parents and trashed=false" % folder_id,
+        "fields": "files(id,name,mimeType)", "pageSize": 1000,
+        "supportsAllDrives": True, "includeItemsFromAllDrives": True})
+    return res.get("files", [])
+
+def create_folder(name, parent):
+    return gws_json("drive", "files", "create",
+                    params={"supportsAllDrives": True},
+                    body={"name": name, "mimeType": FOLDER, "parents": [parent]})["id"]
+
+def copy_file(file_id, name, parent):
+    return gws_json("drive", "files", "copy",
+                    params={"fileId": file_id, "supportsAllDrives": True},
+                    body={"name": name, "parents": [parent]})["id"]
+
+def luma_ok(slug):
+    # Luma rejects HEAD and bare urllib UAs with 403; use GET + a browser UA.
+    req = urllib.request.Request("https://luma.com/aaif-" + slug, method="GET",
+                                 headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+# ----------------------------------------------------------------------------
+def clone_and_rebrand(folder_id, parent, name, ctx, indent=""):
+    """Recursively copy `folder_id` into `parent` as `name`, rebranding files."""
+    new_id = create_folder(name, parent)
+    print("%s+ %s/" % (indent, name))
+    for child in list_children(folder_id):
+        cname, cid, mime = child["name"], child["id"], child["mimeType"]
+        if mime == FOLDER:
+            clone_and_rebrand(cid, new_id, cname, ctx, indent + "  ")
+        else:
+            copy_id = copy_file(cid, cname, new_id)
+            ext = os.path.splitext(cname)[1].lower()
+            if ext in MIME_BY_EXT:
+                tmp = os.path.join(ctx["tmp"], "f" + copy_id + ext)
+                gws_download(copy_id, tmp)
+                n = rebrand_file(tmp, ctx["name"], ctx["upper"], ctx["slug"])
+                if n:
+                    gws_upload(copy_id, tmp, MIME_BY_EXT[ext])
+                left = residual_tokens(tmp)
+                flag = "  !! residual %s" % left if left else ""
+                print("%s  - %s (%d parts)%s" % (indent, cname, n, flag))
+                os.remove(tmp)
+            else:
+                print("%s  - %s (copied)" % (indent, cname))
+    return new_id
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--city", required=True, help='Full city name, e.g. "New York"')
+    ap.add_argument("--slug", help="Luma slug override (default: city, lowercased, no spaces)")
+    ap.add_argument("--dry-run", action="store_true", help="Plan only; create nothing")
+    ap.add_argument("--rebrand-local", metavar="DIR",
+                    help="Rebrand .pptx/.docx/.xlsx in a local dir (no Drive); for testing")
+    a = ap.parse_args()
+
+    name = a.city.strip()
+    upper = name.upper()
+    slug = a.slug.strip().lower() if a.slug else slugify(name)
+    print("City : %s" % name)
+    print("Upper: %s" % upper)
+    print("Slug : aaif-%s  ->  https://luma.com/aaif-%s" % (slug, slug))
+
+    if a.rebrand_local:
+        for root, _d, files in os.walk(a.rebrand_local):
+            for f in files:
+                if os.path.splitext(f)[1].lower() in MIME_BY_EXT:
+                    p = os.path.join(root, f)
+                    n = rebrand_file(p, name, upper, slug)
+                    left = residual_tokens(p)
+                    print("  %s: %d parts%s" % (f, n, ("  !! " + str(left)) if left else ""))
+        return
+
+    ok = luma_ok(slug)
+    print("Luma : %s" % ("LIVE (200)" if ok else "NOT LIVE (404) - create the page at luma.com, or pass --slug"))
+
+    existing = [c for c in list_children(CHAPTERS_PARENT)
+                if c["name"].lower() == name.lower() and c["mimeType"] == FOLDER]
+    if existing:
+        sys.exit("ABORT: a chapter folder named %r already exists (%s)" % (name, existing[0]["id"]))
+
+    if a.dry_run:
+        print("\n[dry-run] Would clone TemplateCity -> %r under Chapters and rebrand all files." % name)
+        if not ok:
+            print("[dry-run] WARNING: Luma page aaif-%s is not live yet." % slug)
+        return
+
+    ctx = {"name": name, "upper": upper, "slug": slug,
+           "tmp": os.path.join(os.environ.get("TMPDIR", "/tmp"), "aaif_chapter")}
+    os.makedirs(ctx["tmp"], exist_ok=True)
+    print()
+    new_id = clone_and_rebrand(TEMPLATE_FOLDER, CHAPTERS_PARENT, name, ctx)
+    print("\nDone. New chapter folder id: %s" % new_id)
+    print("https://drive.google.com/drive/folders/%s" % new_id)
+    if not ok:
+        print("REMINDER: create the Luma page at https://luma.com/aaif-%s (it is not live yet)." % slug)
+
+if __name__ == "__main__":
+    main()
