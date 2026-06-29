@@ -1,0 +1,16 @@
+# Tooling config for the repo's helper scripts (skills/*/scripts/*.py).
+# These are stdlib-only utilities invoked by skills; there is no package to build.
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+# Bug-focused only: pyflakes (undefined names, unused imports/vars) + syntax
+# errors. The scripts are written in a deliberately compact style, so stylistic
+# and auto-modernizing rules (E-series, pyupgrade, formatting) are intentionally
+# left off — a formatting sweep, if wanted, belongs in its own PR.
+select = ["F", "E9"]
+
+[tool.codespell]
+ignore-words-list = "aaif,luma,lu,ba,tre"
