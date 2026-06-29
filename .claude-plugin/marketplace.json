@@ -9,9 +9,9 @@
     {
       "name": "aaif-meetups",
       "source": "./plugins/aaif-meetups",
-      "description": "Skills for running AAIF in-person meetup chapters: event content writing and chapter/community ops.",
+      "description": "Skills for running AAIF in-person and online meetups: event content writing and chapter/series/community ops.",
       "category": "community",
-      "tags": ["meetups", "events", "community", "content", "google-workspace"]
+      "tags": ["meetups", "events", "community", "content", "google-workspace", "online"]
     }
   ]
 }
