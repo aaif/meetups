@@ -14,6 +14,11 @@ The launch post for when RSVPs open. Structure: **one-line hook**, the
 builder-to-builder. Signal, not numbers. The RSVP line MUST be a Luma link. Edit
 the draft before it ships.
 
+**Standard footer (always include).** Below the RSVP/hashtag block, add one quiet
+line with the two standing AAIF attendee links (defaults on every announcement):
+Code of Conduct (events.linuxfoundation.org/about/code-of-conduct) and Privacy
+Policy (linuxfoundation.org/legal/privacy-policy).
+
 ## Input (from the event tracker)
 - Chapter : `[CHAPTER]`
 - Event : `[EVENT TITLE] ([SERIES])`
@@ -40,3 +45,6 @@ Agentic AI Night:
 >
 > RSVP → lu.ma/aaif-sanfrancisco
 > #AgenticAI #MCP
+>
+> Code of Conduct: events.linuxfoundation.org/about/code-of-conduct · Privacy:
+> linuxfoundation.org/legal/privacy-policy

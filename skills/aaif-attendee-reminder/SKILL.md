@@ -12,6 +12,13 @@ by asking them to update their RSVP if plans change** so the seat can be release
 
 **House voice:** warm, concrete, builder-to-builder. Signal, not numbers.
 
+**Standard footer (always include).** After the RSVP line, append one quiet line
+with the two standing AAIF attendee links (defaults on every reminder), e.g.
+*"Reminder: our Code of Conduct
+(events.linuxfoundation.org/about/code-of-conduct) and Privacy Policy
+(linuxfoundation.org/legal/privacy-policy) apply."* This sits outside the ~70-word
+body count.
+
 ## Input (from the event tracker)
 - Event : `[EVENT TITLE]`   When: `[DATE], doors [TIME]`
 - Venue : `[VENUE / ENTRY NOTES]`   Speaker: `[SPEAKER + TOPIC]`
@@ -24,3 +31,6 @@ Agentic AI Night:
 > Chen opens with tool calling at 10M requests a day, then three quick community
 > demos. If your plans change, please update your RSVP so we can pass your seat to
 > the waitlist. See you there.
+>
+> Reminder: our Code of Conduct (events.linuxfoundation.org/about/code-of-conduct)
+> and Privacy Policy (linuxfoundation.org/legal/privacy-policy) apply.
