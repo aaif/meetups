@@ -9,8 +9,9 @@ argument-hint: '<City Name> [--slug <lumaslug>]'
 Spin up a new AAIF city "chapter" by cloning the **TemplateCity** folder in the
 **Chapters** Google Drive and rebranding every Office file from San Francisco to
 the new city. Each chapter folder is the standard template: `Event Tracker.docx`,
-`Attendee CRM.xlsx`, `SKILLS.md.docx`, and the `Event Name/` + `Banners (...)/`
-subfolders of `.pptx` design assets.
+`Attendee CRM.xlsx`, and the `Event Name/` + `Banners (...)/` subfolders of `.pptx`
+design assets. (The old `SKILLS.md.docx` of paste-into-Claude prompts is retired —
+those prompts now live as the `aaif-*` content skills in this repo.)
 
 Prereq: the `gws` CLI must be installed and authenticated (see the user's
 `gws-cli-access` memory). All Drive calls go through it.
@@ -20,8 +21,8 @@ Prereq: the `gws` CLI must be installed and authenticated (see the user's
 The rebrand swaps two tokens and leaves everything else alone. Event-specific
 content — dates ("JUNE 24"), speakers ("Maya Chen"), venue, agenda, the SoMa /
 "SOUTH OF MARKET" neighbourhood placeholder — is **template content** that
-organizers fill per-event later using the prompts inside `SKILLS.md.docx`. Do not
-touch it.
+organizers fill per-event later using the `aaif-*` content skills in this repo. Do
+not touch it.
 
 | Token in template | Becomes | Notes |
 |---|---|---|
