@@ -23,3 +23,23 @@ class TestDocIO(unittest.TestCase):
             n2 = len(list(root2.iter(f"{office.W}tbl")))
             self.assertEqual(n1, n2)
             self.assertGreater(n2, 5)
+
+
+class TestTablePrimitives(unittest.TestCase):
+    def setUp(self):
+        self.root = office.read_document(FIX)
+
+    def test_detail_table_first_row(self):
+        # the detail table's first row is ["EVENT TITLE", <value>]
+        detail = [t for t in office.tables(self.root)
+                  if office.cell_text(office.cells(office.rows(t)[0])[0]) == "EVENT TITLE"]
+        self.assertEqual(len(detail), 1)
+        first = office.rows(detail[0])[0]
+        self.assertEqual(office.cell_text(office.cells(first)[0]), "EVENT TITLE")
+
+    def test_set_cell_text_roundtrips(self):
+        detail = next(t for t in office.tables(self.root)
+                      if office.cell_text(office.cells(office.rows(t)[0])[0]) == "EVENT TITLE")
+        value_cell = office.cells(office.rows(detail)[0])[1]
+        office.set_cell_text(value_cell, "New Night · Test Series")
+        self.assertEqual(office.cell_text(value_cell), "New Night · Test Series")
