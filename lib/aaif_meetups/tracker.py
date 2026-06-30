@@ -4,7 +4,11 @@ import copy
 import datetime as dt
 import re
 
-from aaif_meetups import office
+from aaif_meetups import gws_cli, office
+
+CHAPTERS_PARENT = "1IQ1K7aVOKUUkxAcfLuNjdETEnmavvtjx"
+ONLINE_PARENT = "1g2vHrqDHfh9wBkDJryJIl8wqXA4J-d4i"
+FOLDER_MIME = "application/vnd.google-apps.folder"
 
 _MONTHS = {m: i for i, m in enumerate(
     ["", "jan", "feb", "mar", "apr", "may", "jun",
@@ -227,3 +231,23 @@ def add_event(root, fields, event_date):
     insert_at = kids.index(sectpr) if sectpr is not None else len(kids)
     for offset, el in enumerate(block):
         body.insert(insert_at + offset, el)
+
+
+def _find_folder(parent, name):
+    key = name.strip().lower()
+    for c in gws_cli.list_children(parent):
+        if c.get("mimeType") == FOLDER_MIME and c.get("name", "").lower() == key:
+            return c
+    return None
+
+
+def locate_tracker(name):
+    for parent, kind in ((CHAPTERS_PARENT, "chapter"), (ONLINE_PARENT, "series")):
+        folder = _find_folder(parent, name)
+        if folder:
+            doc = gws_cli.find_child(folder["id"], "Event Tracker.docx")
+            if not doc:
+                raise LookupError("%r has no Event Tracker.docx" % name)
+            return {"file_id": doc["id"], "kind": kind,
+                    "folder_id": folder["id"], "folder_name": folder["name"]}
+    raise LookupError("no chapter or series named %r" % name)

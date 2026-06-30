@@ -2,7 +2,7 @@ import datetime as dt
 import os
 import unittest
 
-from aaif_meetups import office, tracker
+from aaif_meetups import gws_cli, office, tracker
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures", "event_tracker_irl.docx")
 
@@ -99,3 +99,22 @@ class TestAddEvent(unittest.TestCase):
             office.save_document(FIX, self.root, out)
             reloaded = office.read_document(out)
             self.assertEqual(len(tracker.list_events(reloaded)), before + 1)
+
+
+class TestLocate(unittest.TestCase):
+    def test_locate_prefers_chapters_then_online(self):
+        def fake_children(folder_id):
+            if folder_id == tracker.CHAPTERS_PARENT:
+                return [{"id": "fA", "name": "Berlin",
+                         "mimeType": "application/vnd.google-apps.folder"}]
+            if folder_id == "fA":
+                return [{"id": "tDoc", "name": "Event Tracker.docx"}]
+            return []
+        orig = gws_cli.list_children
+        gws_cli.list_children = fake_children
+        try:
+            got = tracker.locate_tracker("berlin")
+        finally:
+            gws_cli.list_children = orig
+        self.assertEqual(got["file_id"], "tDoc")
+        self.assertEqual(got["kind"], "chapter")
