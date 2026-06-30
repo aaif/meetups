@@ -2,6 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Revision (post-build):** gws was pulled back out of Python. The shipped design is:
+> Python (`lib/aaif_meetups/office.py` + `tracker.py`) is a **deterministic local-file
+> docx engine** (read/clone/set-field/restamp + date math) with NO Drive calls; the
+> **agent drives `gws` directly** (locate/download/upload) per each `SKILL.md`. Tasks 8
+> (`gws_cli.py`), 9 (`locate_tracker`), and 12 (refactor onto `gws_cli`) were reverted/
+> removed; the three skill scripts take a **local docx path** instead of a chapter name.
+
 **Goal:** Add a `tracker-io` foundation plus three skills (`aaif-event-status`, `aaif-create-event`, `aaif-update-event`) that read and write an event's section inside a chapter/series `Event Tracker.docx`.
 
 **Architecture:** A stdlib-only Python package `lib/aaif_meetups/` provides Drive access (`gws_cli.py`), low-level docx-zip/table editing (`office.py`), and an event-aware API + date math (`tracker.py`). Each skill is a thin CLI script that adds `lib/` to `sys.path`, calls the package, and talks to Drive via the `gws` CLI. All docx edits happen in pure Python on `word/document.xml` — no LibreOffice/soffice, no third-party libraries.

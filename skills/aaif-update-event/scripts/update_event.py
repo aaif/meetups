@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""Apply a targeted change to an existing event in a chapter/series tracker:
-edit detail fields and, when the date moves, recompute every phase due-date.
-Then report which downstream assets are now stale. Pure-Python docx edit."""
+"""Deterministic, local-file event updater: edit detail fields and, when the date
+moves, recompute every phase due-date. Operates on a docx the agent has ALREADY
+downloaded via the gws CLI — this script never touches Drive. Pure-Python docx edit."""
 import argparse
-import os
 import pathlib
 import sys
-import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "lib"))
-from aaif_meetups import gws_cli, office, tracker  # noqa: E402
+from aaif_meetups import office, tracker  # noqa: E402
 
 STALE_ON_DATE = ["square banner", "Luma cover", "announcement post",
                  "carousel", "day-of slides", "attendee reminder"]
@@ -36,23 +34,18 @@ def apply_changes(root, event, set_pairs, date_str):
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("group")
-    ap.add_argument("event")
+    ap = argparse.ArgumentParser(description="Update an event in a local Event Tracker.docx")
+    ap.add_argument("docx", help="path to a tracker.docx already downloaded via gws")
+    ap.add_argument("event", help="event title (case-insensitive substring), or 'next'/'latest'")
     ap.add_argument("--set", action="append", default=[],
                     metavar="LABEL=VALUE", help='e.g. --set "SPEAKER(S)=Jane Doe"')
     ap.add_argument("--date", help="new DATE & TIME value; triggers due-date recompute")
     a = ap.parse_args()
 
-    loc = tracker.locate_tracker(a.group)
-    with tempfile.TemporaryDirectory() as d:
-        path = os.path.join(d, "tracker.docx")
-        gws_cli.gws_download(loc["file_id"], path)
-        root = office.read_document(path)
-        stale = apply_changes(root, a.event, a.set, a.date)
-        office.save_document(path, root, path)
-        gws_cli.gws_upload(loc["file_id"], path, gws_cli.DOCX)
-    print("Updated %r in %s." % (a.event, loc["folder_name"]))
+    root = office.read_document(a.docx)
+    stale = apply_changes(root, a.event, a.set, a.date)
+    office.save_document(a.docx, root, a.docx)
+    print("Updated %r in %s." % (a.event, a.docx))
     if stale:
         print("Now stale — re-run these skills: " + ", ".join(sorted(stale)))
 

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Read-only status digest for a chapter/series Event Tracker: overdue and
-due-soon tasks grouped by owner. Reads via the gws CLI; pure-Python parsing."""
+"""Deterministic, local-file status digest for an Event Tracker.docx: overdue and
+due-soon tasks grouped by owner. Operates on a docx the agent has ALREADY downloaded
+with the gws CLI — this script never touches Drive. Pure-Python parsing."""
 import argparse
 import datetime as dt
 import os
 import pathlib
 import sys
-import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "lib"))
-from aaif_meetups import gws_cli, office, tracker  # noqa: E402
+from aaif_meetups import office, tracker  # noqa: E402
 
 DUE_SOON_DAYS = 7
 
@@ -42,22 +42,18 @@ def _digest(ev, today):
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("group", help="chapter or series name")
-    ap.add_argument("event", nargs="?", help="optional event title; default all")
+    ap = argparse.ArgumentParser(description="Status digest for a local Event Tracker.docx")
+    ap.add_argument("docx", help="path to a tracker.docx already downloaded via gws")
+    ap.add_argument("event", nargs="?", help="optional event title filter; default all")
     a = ap.parse_args()
-    loc = tracker.locate_tracker(a.group)
-    with tempfile.TemporaryDirectory() as d:
-        path = os.path.join(d, "tracker.docx")
-        gws_cli.gws_download(loc["file_id"], path)
-        root = office.read_document(path)
-        events = tracker.list_events(root)
-        if a.event:
-            events = [e for e in events if a.event.lower() in e["title"].lower()]
-        today = dt.date.today()
-        print("%s (%s) — %d event(s)" % (loc["folder_name"], loc["kind"], len(events)))
-        for e in events:
-            print(_digest(tracker.read_event(root, e["title"]), today))
+    root = office.read_document(a.docx)
+    events = tracker.list_events(root)
+    if a.event:
+        events = [e for e in events if a.event.lower() in e["title"].lower()]
+    today = dt.date.today()
+    print("%s — %d event(s)" % (os.path.basename(a.docx), len(events)))
+    for e in events:
+        print(_digest(tracker.read_event(root, e["title"]), today))
 
 
 if __name__ == "__main__":

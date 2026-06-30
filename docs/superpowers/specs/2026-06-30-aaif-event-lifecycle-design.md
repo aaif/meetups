@@ -1,7 +1,17 @@
 # AAIF Event Lifecycle + `tracker-io` Foundation — Design
 
 **Date:** 2026-06-30
-**Status:** Draft for review
+**Status:** Implemented (with revision below)
+
+> **Revision (post-build):** the gws-orchestration was pulled back OUT of Python. The
+> Python layer (`lib/aaif_meetups/office.py` + `tracker.py`) is now a **deterministic,
+> local-file docx engine only** — no Drive calls, no `gws` wrapper. The **agent drives
+> every `gws` action directly** (locate → download → upload) per each skill's `SKILL.md`,
+> for flexibility. There is no `locate_tracker()` or `gws_cli.py`; the original
+> `create_chapter.py` / `create_series.py` keep their own self-contained gws calls. The
+> design below still describes the docx engine and date math accurately; mentally replace
+> "`locate_tracker` / `gws_cli`" with "the agent runs the gws CLI; Python edits the
+> downloaded file."
 **Scope of this spec:** Sub-projects #1 (the `tracker-io` foundation) and #2 (the
 three event-lifecycle skills). The other sub-projects (pptx-fill-export, content-skill
 enhancement, management/health skills, two-bundle repo split) are out of scope here and
