@@ -3,8 +3,9 @@
 
 A SKILL.md whose frontmatter fails to parse loads at runtime with *empty
 metadata* — every field (including the `description` that drives auto-activation)
-is silently dropped. `claude plugin validate` catches this in CI; this hook gives
-the same feedback locally on commit. Requires PyYAML (pulled in by pre-commit).
+is silently dropped. `claude plugin validate` does NOT parse skill frontmatter,
+so this hook is the guard — it runs both locally on commit and in CI (the
+pre-commit job). Requires PyYAML (pulled in by pre-commit).
 """
 import re
 import sys

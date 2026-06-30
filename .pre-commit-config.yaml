@@ -27,8 +27,9 @@ repos:
       - id: check-shebang-scripts-are-executable
 
   # --- Python: Ruff bug-focused lint (config in pyproject.toml) ---------------
-  # Lint only (pyflakes + syntax) — no auto-format. The helper scripts use a
-  # deliberately compact style; a formatting sweep, if wanted, is its own PR.
+  # Lint only (pyflakes + syntax), no reformatting. `--fix` still auto-removes
+  # unused imports/vars but never restyles code; the helper scripts use a
+  # deliberately compact style. A formatting sweep, if wanted, is its own PR.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.20
     hooks:
@@ -49,7 +50,8 @@ repos:
       - id: gitleaks
 
   # --- SKILL.md frontmatter syntax (broken YAML => empty metadata at runtime) --
-  # Local fast-feedback guard; `claude plugin validate` is the CI authority.
+  # Runs locally on commit and in CI; this hook — not `claude plugin validate`,
+  # which only checks the manifest schemas — is what catches skill frontmatter.
   - repo: local
     hooks:
       - id: check-skill-frontmatter

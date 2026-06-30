@@ -2,7 +2,7 @@
 
 All notable changes to the **AAIF Meetups Toolkit** plugin are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
-plugin version is the `version` field in `plugins/aaif-meetups/.claude-plugin/plugin.json`.
+plugin version is the `version` field in `.claude-plugin/plugin.json`.
 
 ## [0.2.0]
 
