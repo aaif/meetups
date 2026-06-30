@@ -1,6 +1,9 @@
-"""Shared Google Drive helpers, invoked through the `gws` CLI. Lifted from
-create_chapter.py so every skill (chapter/series creation, event lifecycle)
-uses one implementation. Stdlib-only."""
+"""Thin wrapper around the googleworkspace `gws` CLI (https://github.com/googleworkspace/cli).
+
+This does NOT reimplement Drive — every function shells out to the real `gws`
+binary via subprocess, exactly as create_chapter.py already does. Lifted here so
+every skill (chapter/series creation, event lifecycle) shares one wrapper instead
+of duplicating the subprocess calls. Stdlib-only."""
 import json
 import os
 import subprocess

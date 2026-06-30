@@ -4,7 +4,7 @@
 
 **Goal:** Add a `tracker-io` foundation plus three skills (`aaif-event-status`, `aaif-create-event`, `aaif-update-event`) that read and write an event's section inside a chapter/series `Event Tracker.docx`.
 
-**Architecture:** A stdlib-only Python package `lib/aaif_meetups/` provides Drive access (`gws.py`), low-level docx-zip/table editing (`office.py`), and an event-aware API + date math (`tracker.py`). Each skill is a thin CLI script that adds `lib/` to `sys.path`, calls the package, and talks to Drive via the `gws` CLI. All docx edits happen in pure Python on `word/document.xml` — no LibreOffice/soffice, no third-party libraries.
+**Architecture:** A stdlib-only Python package `lib/aaif_meetups/` provides Drive access (`gws_cli.py`), low-level docx-zip/table editing (`office.py`), and an event-aware API + date math (`tracker.py`). Each skill is a thin CLI script that adds `lib/` to `sys.path`, calls the package, and talks to Drive via the `gws` CLI. All docx edits happen in pure Python on `word/document.xml` — no LibreOffice/soffice, no third-party libraries.
 
 **Tech Stack:** Python 3.9 (stdlib only: `zipfile`, `xml.etree.ElementTree`, `copy`, `datetime`, `re`, `argparse`, `subprocess`, `json`), `unittest`, the `gws` CLI for Google Drive.
 
@@ -13,7 +13,7 @@
 - **Stdlib-only.** No third-party Python deps (no `python-docx`, no `Pillow`). The repo has "no package to build."
 - **Pure Python edits.** No `soffice`/LibreOffice anywhere in this plan.
 - **Python 3.9**, `ruff` line-length 100, lint select `["F", "E9"]` (bug-focused).
-- **Drive via `gws` CLI** only (prereq: `gws-cli-access`), through `lib/aaif_meetups/gws.py`.
+- **Drive via `gws` CLI** only (prereq: `gws-cli-access`), through `lib/aaif_meetups/gws_cli.py`.
 - **By-label, never positional.** Detail rows match on label text (`EVENT TITLE`, …); phase tables match on the header `["TASK","OWNER","DUE","STATUS"]`. Never hard-code a table/row index.
 - **First argument is `<chapter|series>`** — resolved against `Chapters/` (⇒ in-person) or `Online/` (⇒ online); mode is auto-detected from which parent matched.
 - **Drive folder IDs:** Chapters `1IQ1K7aVOKUUkxAcfLuNjdETEnmavvtjx`, Online `1g2vHrqDHfh9wBkDJryJIl8wqXA4J-d4i`.
@@ -25,7 +25,7 @@
 ## File Structure
 
 - Create `lib/aaif_meetups/__init__.py` — package marker (empty).
-- Create `lib/aaif_meetups/gws.py` — Drive helpers (run gws, list/get/update/copy/create, download/upload).
+- Create `lib/aaif_meetups/gws_cli.py` — Drive helpers (run gws, list/get/update/copy/create, download/upload).
 - Create `lib/aaif_meetups/office.py` — docx zip read/write + table/cell/paragraph primitives.
 - Create `lib/aaif_meetups/tracker.py` — event-aware API (`locate_tracker`, `list_events`, `read_event`, `clone_example_section`, `write_event`, `set_field`, `set_due_dates`) + date math.
 - Create `lib/aaif_meetups/tests/__init__.py` — empty.
@@ -778,11 +778,11 @@ git commit -m "feat(tracker): add_event clones and appends a dated section"
 
 ---
 
-## Task 8: `gws.py` — Drive helpers (extracted, shared)
+## Task 8: `gws_cli.py` — Drive helpers (extracted, shared)
 
 **Files:**
-- Create: `lib/aaif_meetups/gws.py`
-- Test: `lib/aaif_meetups/tests/test_gws.py`
+- Create: `lib/aaif_meetups/gws_cli.py`
+- Test: `lib/aaif_meetups/tests/test_gws_cli.py`
 
 **Interfaces:**
 - Produces (ported verbatim from `create_chapter.py`'s helpers, made importable):
@@ -796,7 +796,7 @@ git commit -m "feat(tracker): add_event clones and appends a dated section"
 - [ ] **Step 1: Write the failing test** (pure-function test only — no Drive calls)
 
 ```python
-# lib/aaif_meetups/tests/test_gws.py
+# lib/aaif_meetups/tests/test_gws_cli.py
 import unittest
 from aaif_meetups import gws
 
@@ -805,7 +805,7 @@ class TestGwsModule(unittest.TestCase):
         for name in ("gws_json", "gws_download", "gws_upload",
                      "list_children", "find_child"):
             self.assertTrue(callable(getattr(gws, name)), name)
-        self.assertIn("wordprocessingml", gws.DOCX)
+        self.assertIn("wordprocessingml", gws_cli.DOCX)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -815,7 +815,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'aaif_meetups.gws'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Port the helpers from `skills/aaif-create-chapter/scripts/create_chapter.py` (the `_gws`, `gws_json`, `gws_download`, `gws_upload`, `list_children` functions and the `DOCX`/folder constants), into `lib/aaif_meetups/gws.py`. Add `find_child`:
+Port the helpers from `skills/aaif-create-chapter/scripts/create_chapter.py` (the `_gws`, `gws_json`, `gws_download`, `gws_upload`, `list_children` functions and the `DOCX`/folder constants), into `lib/aaif_meetups/gws_cli.py`. Add `find_child`:
 
 ```python
 def find_child(folder_id, name):
@@ -835,7 +835,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add lib/aaif_meetups/gws.py lib/aaif_meetups/tests/test_gws.py
+git add lib/aaif_meetups/gws_cli.py lib/aaif_meetups/tests/test_gws_cli.py
 git commit -m "feat(gws): shared Drive helpers extracted from create_chapter"
 ```
 
@@ -848,7 +848,7 @@ git commit -m "feat(gws): shared Drive helpers extracted from create_chapter"
 - Test: `lib/aaif_meetups/tests/test_tracker.py` (add a test that monkeypatches `gws`)
 
 **Interfaces:**
-- Consumes: `gws.list_children`, `gws.find_child`.
+- Consumes: `gws_cli.list_children`, `gws_cli.find_child`.
 - Produces:
   - `CHAPTERS_PARENT`, `ONLINE_PARENT` constants (the folder IDs from Global Constraints).
   - `locate_tracker(name) -> {"file_id", "kind", "folder_id", "folder_name"}` — find a folder named `name` (case-insensitive exact) under Chapters/ first, else Online/; `kind` is `"chapter"` or `"series"`. Inside it, find `Event Tracker.docx`. Raises `LookupError` if the folder or the tracker is missing.
@@ -857,7 +857,7 @@ git commit -m "feat(gws): shared Drive helpers extracted from create_chapter"
 
 ```python
 # add to test_tracker.py
-from aaif_meetups import gws as gws_mod
+from aaif_meetups import gws_cli as gws_mod
 
 class TestLocate(unittest.TestCase):
     def test_locate_prefers_chapters_then_online(self):
@@ -897,7 +897,7 @@ FOLDER_MIME = "application/vnd.google-apps.folder"
 
 def _find_folder(parent, name):
     key = name.strip().lower()
-    for c in gws.list_children(parent):
+    for c in gws_cli.list_children(parent):
         if c.get("mimeType") == FOLDER_MIME and c.get("name", "").lower() == key:
             return c
     return None
@@ -907,7 +907,7 @@ def locate_tracker(name):
     for parent, kind in ((CHAPTERS_PARENT, "chapter"), (ONLINE_PARENT, "series")):
         folder = _find_folder(parent, name)
         if folder:
-            doc = gws.find_child(folder["id"], "Event Tracker.docx")
+            doc = gws_cli.find_child(folder["id"], "Event Tracker.docx")
             if not doc:
                 raise LookupError("%r has no Event Tracker.docx" % name)
             return {"file_id": doc["id"], "kind": kind,
@@ -936,7 +936,7 @@ git commit -m "feat(tracker): locate_tracker resolves chapter or series"
 - Create: `skills/aaif-event-status/scripts/event_status.py`
 
 **Interfaces:**
-- Consumes: `tracker.locate_tracker`, `gws.gws_download`, `office.read_document`, `tracker.list_events` / `read_event`, `tracker.parse_due`.
+- Consumes: `tracker.locate_tracker`, `gws_cli.gws_download`, `office.read_document`, `tracker.list_events` / `read_event`, `tracker.parse_due`.
 - Produces: a CLI `python event_status.py <chapter|series> [event]` that prints overdue / due-soon tasks by owner. Read-only.
 
 - [ ] **Step 1: Write the failing test (core logic, offline)**
@@ -978,7 +978,7 @@ due-soon tasks grouped by owner. Reads via the gws CLI; pure-Python parsing."""
 import argparse, datetime as dt, os, pathlib, sys, tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "lib"))
-from aaif_meetups import gws, office, tracker  # noqa: E402
+from aaif_meetups import gws_cli, office, tracker  # noqa: E402
 
 DUE_SOON_DAYS = 7
 
@@ -1018,7 +1018,7 @@ def main():
     loc = tracker.locate_tracker(a.group)
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "tracker.docx")
-        gws.gws_download(loc["file_id"], path)
+        gws_cli.gws_download(loc["file_id"], path)
         root = office.read_document(path)
         events = tracker.list_events(root)
         if a.event:
@@ -1086,7 +1086,7 @@ git commit -m "feat: aaif-event-status skill (read-only task digest)"
 - Test: `skills/aaif-create-event/scripts/test_create_event.py`
 
 **Interfaces:**
-- Consumes: `tracker.locate_tracker/add_event/set_field/set_due_dates/read_event/parse_event_date`, `gws.gws_download/gws_upload/DOCX`, `office.read_document/save_document`.
+- Consumes: `tracker.locate_tracker/add_event/set_field/set_due_dates/read_event/parse_event_date`, `gws_cli.gws_download/gws_upload/DOCX`, `office.read_document/save_document`.
 - Produces:
   - `create_event.py <chapter|series> --title T --date "..." [--theme --venue --platform --speakers --luma --capacity --organizer] [--dry-run]` — downloads the tracker, `add_event`, re-uploads. Aborts if an event with the same title already exists.
   - `update_event.py <chapter|series> <event> [--set "LABEL=value" ...] [--date "..."]` — applies field edits; if `--date`, recomputes due dates; prints which downstream assets are now stale.
@@ -1134,7 +1134,7 @@ Stdlib-only, pure-Python docx edit; Drive I/O via the gws CLI."""
 import argparse, datetime as dt, os, pathlib, sys, tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "lib"))
-from aaif_meetups import gws, office, tracker  # noqa: E402
+from aaif_meetups import gws_cli, office, tracker  # noqa: E402
 
 # CLI flag -> detail label
 FIELD_MAP = {"title": "EVENT TITLE", "date": "DATE & TIME", "theme": "THEME / SERIES",
@@ -1179,13 +1179,13 @@ def main():
         return
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "tracker.docx")
-        gws.gws_download(loc["file_id"], path)
+        gws_cli.gws_download(loc["file_id"], path)
         root = office.read_document(path)
         if any(a.title.lower() in e["title"].lower() for e in tracker.list_events(root)):
             sys.exit("ABORT: an event titled %r already exists in this tracker." % a.title)
         tracker.add_event(root, fields, event_date)
         office.save_document(path, root, path)
-        gws.gws_upload(loc["file_id"], path, gws.DOCX)
+        gws_cli.gws_upload(loc["file_id"], path, gws_cli.DOCX)
     print("Done. New event section added and due-dates stamped.")
 
 
@@ -1208,7 +1208,7 @@ Then report which downstream assets are now stale. Pure-Python docx edit."""
 import argparse, os, pathlib, sys, tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "lib"))
-from aaif_meetups import gws, office, tracker  # noqa: E402
+from aaif_meetups import gws_cli, office, tracker  # noqa: E402
 
 STALE_ON_DATE = ["square banner", "Luma cover", "announcement post",
                  "carousel", "day-of slides", "attendee reminder"]
@@ -1227,7 +1227,7 @@ def main():
     loc = tracker.locate_tracker(a.group)
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "tracker.docx")
-        gws.gws_download(loc["file_id"], path)
+        gws_cli.gws_download(loc["file_id"], path)
         root = office.read_document(path)
         stale = set()
         for pair in a.set:
@@ -1240,7 +1240,7 @@ def main():
             tracker.set_due_dates(root, a.event, tracker.parse_event_date(a.date))
             stale.update(STALE_ON_DATE)
         office.save_document(path, root, path)
-        gws.gws_upload(loc["file_id"], path, gws.DOCX)
+        gws_cli.gws_upload(loc["file_id"], path, gws_cli.DOCX)
     print("Updated %r in %s." % (a.event, loc["folder_name"]))
     if stale:
         print("Now stale — re-run these skills: " + ", ".join(sorted(stale)))
@@ -1326,14 +1326,14 @@ git commit -m "feat: aaif-create-event and aaif-update-event skills"
 
 ---
 
-## Task 12: Refactor existing scripts onto shared `gws.py`
+## Task 12: Refactor existing scripts onto shared `gws_cli.py`
 
 **Files:**
 - Modify: `skills/aaif-create-chapter/scripts/create_chapter.py`
 - Modify: `skills/aaif-create-online-series/scripts/create_series.py`
 
 **Interfaces:**
-- Consumes: `lib/aaif_meetups/gws.py` (Task 8).
+- Consumes: `lib/aaif_meetups/gws_cli.py` (Task 8).
 
 - [ ] **Step 1: Add the sys.path shim + import, delete the duplicated helpers in `create_chapter.py`**
 
@@ -1342,12 +1342,12 @@ Replace the in-file `_gws`, `gws_json`, `gws_download`, `gws_upload`, `list_chil
 ```python
 import pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "lib"))
-from aaif_meetups.gws import (  # noqa: E402
+from aaif_meetups.gws_cli import (  # noqa: E402
     gws_json, gws_download, gws_upload, list_children, DOCX, PPTX, XLSX, FOLDER,
 )
 ```
 
-(Move any constants the script still needs — `PPTX`, `XLSX`, `FOLDER`, `MIME_BY_EXT` — into `gws.py` if not already there, and import them. Keep `create_folder`/`copy_file` in `gws.py` too.)
+(Move any constants the script still needs — `PPTX`, `XLSX`, `FOLDER`, `MIME_BY_EXT` — into `gws_cli.py` if not already there, and import them. Keep `create_folder`/`copy_file` in `gws_cli.py` too.)
 
 - [ ] **Step 2: Run the existing local rebrand self-test to prove no regression**
 
