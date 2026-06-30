@@ -17,8 +17,8 @@ DUE_SOON_DAYS = 7
 def classify(tasks, anchor, today):
     overdue, due_soon = [], []
     for t in tasks:
-        d = tracker.parse_due(t.get("due", ""), anchor)
-        if d is None or t.get("status") == "Done":
+        d = tracker.parse_due(t.due, anchor)
+        if d is None or t.status == "Done":
             continue
         if d < today:
             overdue.append(t)
@@ -30,14 +30,17 @@ def classify(tasks, anchor, today):
 def _digest(ev, today):
     flat = [t for ph in ev["phases"] for t in ph["tasks"]]
     res = classify(flat, ev["date"] or today, today)
-    lines = ["", "== %s ==" % ev["title"],
+    header = "== %s ==" % ev["title"]
+    if ev["date"] is None:
+        header += "  (! DATE & TIME did not parse — status anchored to today)"
+    lines = ["", header,
              "%d overdue, %d due within %d days"
              % (len(res["overdue"]), len(res["due_soon"]), DUE_SOON_DAYS)]
     for label in ("overdue", "due_soon"):
         if res[label]:
             lines.append("  %s:" % label.replace("_", "-"))
-            for t in sorted(res[label], key=lambda x: x.get("owner", "")):
-                lines.append("    [%s] %s (due %s)" % (t["owner"], t["task"], t["due"]))
+            for t in sorted(res[label], key=lambda x: x.owner):
+                lines.append("    [%s] %s (due %s)" % (t.owner, t.task, t.due))
     return "\n".join(lines)
 
 
@@ -47,13 +50,13 @@ def main():
     ap.add_argument("event", nargs="?", help="optional event title filter; default all")
     a = ap.parse_args()
     root = office.read_document(a.docx)
-    events = tracker.list_events(root)
+    refs = tracker.list_events(root)
     if a.event:
-        events = [e for e in events if a.event.lower() in e["title"].lower()]
+        refs = [e for e in refs if a.event.lower() in e["title"].lower()]
     today = dt.date.today()
-    print("%s — %d event(s)" % (os.path.basename(a.docx), len(events)))
-    for e in events:
-        print(_digest(tracker.read_event(root, e["title"]), today))
+    print("%s — %d event(s)" % (os.path.basename(a.docx), len(refs)))
+    for ref in refs:
+        print(_digest(tracker.view_event(ref), today))
 
 
 if __name__ == "__main__":

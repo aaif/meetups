@@ -43,3 +43,25 @@ class TestTablePrimitives(unittest.TestCase):
         value_cell = office.cells(office.rows(detail)[0])[1]
         office.set_cell_text(value_cell, "New Night · Test Series")
         self.assertEqual(office.cell_text(value_cell), "New Night · Test Series")
+
+
+class TestSaveFidelity(unittest.TestCase):
+    def test_save_preserves_namespace_prefixes(self):
+        import re
+        import zipfile
+        root = office.read_document(FIX)
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "o.docx")
+            office.save_document(FIX, root, out)
+            xml = zipfile.ZipFile(out).read("word/document.xml").decode("utf8", "ignore")
+        # no auto-generated ns0:/ns1:/ns2: prefixes; r:id relationship refs intact
+        self.assertEqual(re.findall(r"\bns\d+:", xml), [])
+        self.assertIn("r:id=", xml)
+
+
+class TestSetCellTextEmpty(unittest.TestCase):
+    def test_raises_when_cell_has_no_run(self):
+        from xml.etree import ElementTree as ET
+        tc = ET.fromstring('<w:tc xmlns:w="%s"><w:p/></w:tc>' % office.NS)
+        with self.assertRaises(ValueError):
+            office.set_cell_text(tc, "x")

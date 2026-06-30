@@ -3,8 +3,19 @@ date-stamping math. Stdlib-only; pure-Python OOXML editing via office.py."""
 import copy
 import datetime as dt
 import re
+from dataclasses import dataclass
 
 from aaif_meetups import office
+
+
+@dataclass(frozen=True)
+class Task:
+    """One phase-table row. Attribute access (not dict keys) so a typo'd field
+    raises AttributeError instead of silently returning a default."""
+    task: str
+    owner: str
+    due: str
+    status: str
 
 _MONTHS = {m: i for i, m in enumerate(
     ["", "jan", "feb", "mar", "apr", "may", "jun",
@@ -19,10 +30,13 @@ def parse_event_date(text):
     m = _DATE_RE.search(text)
     if not m:
         raise ValueError("no month/day in event date: %r" % text)
-    month, day = _MONTHS[m.group(1)[:3].lower()], int(m.group(2))
     ym = _YEAR_RE.search(text)
-    year = int(ym.group(1)) if ym else dt.date.today().year
-    return dt.date(year, month, day)
+    if not ym:
+        # A yearless date would otherwise default to the current year — often a
+        # date in the past — and silently shift every due-date backward.
+        raise ValueError("event date must include a 4-digit year: %r" % text)
+    month, day = _MONTHS[m.group(1)[:3].lower()], int(m.group(2))
+    return dt.date(int(ym.group(1)), month, day)
 
 
 def parse_due(token, anchor):
@@ -96,6 +110,10 @@ def list_events(root):
 
 
 def _select(events, event):
+    """Resolve an event ref. 'next'/'latest' pick by date; otherwise prefer an
+    exact (case-insensitive) title match, then a unique substring match. Raises
+    LookupError if a substring is ambiguous (matches 2+ titles) so a write never
+    silently lands on the wrong event."""
     key = (event or "").strip().lower()
     dated = [e for e in events if e["date"]]
     if key == "next":
@@ -106,31 +124,38 @@ def _select(events, event):
         return (future or sorted(dated, key=lambda e: e["date"]))[0]
     if key == "latest":
         return max(dated, key=lambda e: e["date"]) if dated else None
-    for e in events:
-        if key in e["title"].lower():
-            return e
-    return None
+    exact = [e for e in events if e["title"].strip().lower() == key]
+    if exact:
+        return exact[0]
+    partial = [e for e in events if key in e["title"].lower()]
+    if len(partial) > 1:
+        raise LookupError("event %r is ambiguous; matches: %s"
+                          % (event, ", ".join(repr(e["title"]) for e in partial)))
+    return partial[0] if partial else None
 
 
-def read_event(root, event):
-    events = list_events(root)
-    e = _select(events, event)
-    if e is None:
-        raise LookupError("no event matching %r" % event)
+def view_event(ref):
+    """Parse a list_events ref into a plain read model: details dict + phases of
+    Task objects. Takes the ref directly (no re-selection) so iterating
+    list_events never round-trips through an ambiguous title lookup."""
     details = {}
-    for r in office.rows(e["detail_table"]):
+    for r in office.rows(ref["detail_table"]):
         cs = office.cells(r)
         if len(cs) >= 2:
             details[office.cell_text(cs[0])] = office.cell_text(cs[1])
     phases = []
-    for pt in e["phase_tables"]:
+    for pt in ref["phase_tables"]:
         tasks = []
         for r in office.rows(pt)[1:]:
             cs = [office.cell_text(c) for c in office.cells(r)]
             cs += [""] * (4 - len(cs))
-            tasks.append({"task": cs[0], "owner": cs[1], "due": cs[2], "status": cs[3]})
+            tasks.append(Task(task=cs[0], owner=cs[1], due=cs[2], status=cs[3]))
         phases.append({"tasks": tasks})
-    return {"title": e["title"], "details": details, "phases": phases, "date": e["date"]}
+    return {"title": ref["title"], "details": details, "phases": phases, "date": ref["date"]}
+
+
+def read_event(root, event):
+    return view_event(_selected_or_raise(root, event))
 
 
 def _selected_or_raise(root, event):
@@ -198,6 +223,16 @@ def _body(root):
     return root.find(office.W + "body")
 
 
+def _is_example_caption(text):
+    low = text.lower()
+    return "duplicate this whole section" in low or low.startswith("example event")
+
+
+def _format_heading(event_date, title):
+    return "%s %d, %d  ·  %s" % (event_date.strftime("%B"), event_date.day,
+                                 event_date.year, title.upper())
+
+
 def add_event(root, fields, event_date):
     events = list_events(root)
     if not events:
@@ -206,9 +241,12 @@ def add_event(root, fields, event_date):
     old_date = example["date"]
     body = _body(root)
     kids = list(body)
-    # span: the paragraph immediately before the detail table .. the last phase table
     detail_idx = kids.index(example["detail_table"])
-    start = detail_idx - 1 if detail_idx > 0 and kids[detail_idx - 1].tag == office.W + "p" else detail_idx
+    # span: include the (up to 2) heading/caption paragraphs before the detail
+    # table — the date/title heading and the "Example event — duplicate…" caption.
+    start = detail_idx
+    while start - 1 >= 0 and kids[start - 1].tag == office.W + "p" and detail_idx - (start - 1) <= 2:
+        start -= 1
     last = example["phase_tables"][-1] if example["phase_tables"] else example["detail_table"]
     end = kids.index(last)
     block = [copy.deepcopy(kids[i]) for i in range(start, end + 1)]
@@ -217,11 +255,25 @@ def add_event(root, fields, event_date):
                       if el.tag == office.W + "tbl" and is_detail_table(el))
     new_phases = [el for el in block
                   if el.tag == office.W + "tbl" and is_phase_table(el)]
-    for label, value in fields.items():
-        _set_detail(new_detail, label, value)
+    missing = [label for label, value in fields.items()
+               if not _set_detail(new_detail, label, value)]
+    if missing:
+        raise LookupError("no detail row(s) labelled: %s "
+                          "(this tracker's labels may differ — e.g. online uses "
+                          "PLATFORM / STREAM / JOIN LINK, not VENUE / LOCATION)"
+                          % ", ".join(repr(m) for m in missing))
     if old_date is not None:
         _restamp_tables(new_detail, new_phases, old_date, event_date)
     _reset_status(new_phases)
+    # rewrite the heading to the new event; drop the stale example caption
+    detail_pos = block.index(new_detail)
+    title = fields.get("EVENT TITLE")
+    for para in [el for el in block[:detail_pos] if el.tag == office.W + "p"]:
+        text = office.para_text(para)
+        if _is_example_caption(text):
+            block.remove(para)
+        elif title and text:
+            office.set_para_text(para, _format_heading(event_date, title))
     # insert before trailing sectPr if present, else at end
     sectpr = body.find(office.W + "sectPr")
     insert_at = kids.index(sectpr) if sectpr is not None else len(kids)

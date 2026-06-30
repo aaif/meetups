@@ -32,13 +32,23 @@ deterministic docx edit on a local file.** Prereq: `gws` installed and authentic
 3. **Add the event (deterministic, local).** Aborts if the title already exists:
 
    ```
+   # in-person (chapter) tracker
    python skills/aaif-create-event/scripts/create_event.py tracker.docx \
      --title "Eval Night · Builder Series" \
      --date "Wed · August 12, 2026 · 18:00 — late" \
-     [--theme ...] [--venue ...] [--platform ...] [--speakers ...] \
+     [--theme ...] [--venue ...] [--location ...] [--speakers ...] \
      [--luma ...] [--capacity ...] [--organizer ...] [--dry-run]
+
+   # online (series) tracker — use --platform / --join, NOT --venue / --location
+   python skills/aaif-create-event/scripts/create_event.py tracker.docx \
+     --title "..." --date "..." [--platform "Zoom Webinar"] [--join "lu.ma/..."] ...
    ```
-   Omitted fields keep the example's text for the organizer to fill later.
+   Flags must match the tracker's labels: a chapter tracker has `VENUE` /
+   `LOCATION / CITY`; a series tracker has `PLATFORM` / `STREAM / JOIN LINK`. Passing
+   a flag whose label doesn't exist in that tracker **aborts loudly** (it is not
+   silently dropped). Omitted fields keep the example's text for the organizer to
+   fill later. Note: `--luma` sets the displayed URL text only; the clickable Luma
+   link target (per chapter/series) is not rewritten here — set it on the Luma page.
 
 4. **Upload it back:**
 

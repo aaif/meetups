@@ -37,9 +37,17 @@ deterministic docx edit on a local file.** Prereq: `gws` installed and authentic
    python skills/aaif-update-event/scripts/update_event.py tracker.docx "Agentic AI Night" \
      --date "Wed · July 8, 2026 · 17:30 — late"
    ```
-   The event argument matches a case-insensitive title substring, or `next` / `latest`.
-   Detail labels: EVENT TITLE, DATE & TIME, LOCATION / CITY, VENUE, THEME / SERIES,
-   FORMAT(S), SPEAKER(S), LUMA URL, CAPACITY / RSVPS, ORGANIZER ON POINT.
+   The event argument matches an **exact** (case-insensitive) title first, then a
+   unique substring; an ambiguous substring (2+ matching titles) errors rather than
+   guessing. You can also pass `next` / `latest`.
+
+   Detail labels depend on the tracker type:
+   - **chapter (in-person):** EVENT TITLE, DATE & TIME, LOCATION / CITY, VENUE,
+     THEME / SERIES, FORMAT(S), SPEAKER(S), LUMA URL, CAPACITY / RSVPS, ORGANIZER ON POINT.
+   - **series (online):** same, but `PLATFORM` and `STREAM / JOIN LINK` replace
+     `LOCATION / CITY` and `VENUE`.
+
+   `--set` with a label absent from that tracker raises an error (it won't silently no-op).
 
 3. **Upload it back:**
 

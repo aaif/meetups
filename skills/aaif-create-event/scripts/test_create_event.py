@@ -29,6 +29,18 @@ class TestCreateCore(unittest.TestCase):
             titles = [e["title"] for e in tracker.list_events(root)]
             self.assertIn("Eval Night", titles)
 
+    def test_bad_label_raises_not_silent(self):
+        # PLATFORM is absent on the IRL tracker -> must raise (no silent drop).
+        with tempfile.TemporaryDirectory() as d:
+            local = os.path.join(d, "t.docx")
+            shutil.copy(FIX, local)
+            with self.assertRaises(LookupError):
+                create_event.apply_local(local, {
+                    "EVENT TITLE": "X",
+                    "DATE & TIME": "Wed · August 12, 2026 · 18:00 — late",
+                    "PLATFORM": "Zoom",
+                }, dt.date(2026, 8, 12))
+
 
 if __name__ == "__main__":
     unittest.main()

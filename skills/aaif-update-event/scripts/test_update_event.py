@@ -30,10 +30,21 @@ class TestApplyChanges(unittest.TestCase):
         stale = update_event.apply_changes(
             self.root, "Agentic AI Night", [], "Wed · July 8, 2026 · 17:30 — late")
         ev = tracker.read_event(self.root, "Agentic AI Night")
-        self.assertEqual(ev["phases"][0]["tasks"][0]["due"], "Jun 10")
+        self.assertEqual(ev["phases"][0]["tasks"][0].due, "Jun 10")
         self.assertEqual(ev["details"]["DATE & TIME"], "Wed · July 8, 2026 · 17:30 — late")
         self.assertEqual(ev["date"], dt.date(2026, 7, 8))
         self.assertIn("square banner", stale)
+
+    def test_set_and_date_together(self):
+        stale = update_event.apply_changes(
+            self.root, "Agentic AI Night",
+            ["SPEAKER(S)=Jane Doe"], "Wed · July 8, 2026 · 17:30 — late")
+        ev = tracker.read_event(self.root, "Agentic AI Night")
+        self.assertEqual(ev["details"]["SPEAKER(S)"], "Jane Doe")
+        self.assertEqual(ev["phases"][0]["tasks"][0].due, "Jun 10")
+        # stale set is the union of speaker- and date-driven assets
+        self.assertIn("speaker bio", stale)
+        self.assertIn("Luma cover", stale)
 
 
 if __name__ == "__main__":

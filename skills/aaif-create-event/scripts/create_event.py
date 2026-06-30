@@ -10,11 +10,14 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "lib"))
 from aaif_meetups import office, tracker  # noqa: E402
 
-# CLI flag -> detail label
+# CLI flag -> detail label. Note in-person trackers carry VENUE / LOCATION-CITY,
+# online trackers carry PLATFORM / STREAM-JOIN-LINK — use the flags that match the
+# tracker you downloaded; a flag whose label is absent now errors (not silently dropped).
 FIELD_MAP = {"title": "EVENT TITLE", "date": "DATE & TIME", "theme": "THEME / SERIES",
-             "venue": "VENUE", "platform": "VENUE", "speakers": "SPEAKER(S)",
+             "venue": "VENUE", "platform": "PLATFORM", "speakers": "SPEAKER(S)",
              "luma": "LUMA URL", "capacity": "CAPACITY / RSVPS",
-             "organizer": "ORGANIZER ON POINT", "location": "LOCATION / CITY"}
+             "organizer": "ORGANIZER ON POINT", "location": "LOCATION / CITY",
+             "join": "STREAM / JOIN LINK"}
 
 
 def apply_local(path, fields, event_date):
@@ -37,7 +40,7 @@ def main():
     ap.add_argument("docx", help="path to a tracker.docx already downloaded via gws")
     ap.add_argument("--title", required=True)
     ap.add_argument("--date", required=True, help='e.g. "Wed · August 12, 2026 · 18:00 — late"')
-    for f in ("theme", "venue", "platform", "speakers", "luma", "capacity",
+    for f in ("theme", "venue", "platform", "join", "speakers", "luma", "capacity",
               "organizer", "location"):
         ap.add_argument("--" + f)
     ap.add_argument("--dry-run", action="store_true")
