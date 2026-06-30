@@ -1,7 +1,10 @@
 import datetime as dt
+import os
 import unittest
 
-from aaif_meetups import tracker
+from aaif_meetups import office, tracker
+
+FIX = os.path.join(os.path.dirname(__file__), "fixtures", "event_tracker_irl.docx")
 
 
 class TestDates(unittest.TestCase):
@@ -25,3 +28,25 @@ class TestDates(unittest.TestCase):
         self.assertEqual(tracker.restamp("May 27", old, new), "Jun 10")
         self.assertEqual(tracker.restamp("16:00", old, new), "16:00")
         self.assertEqual(tracker.restamp("", old, new), "")
+
+
+class TestEventModel(unittest.TestCase):
+    def setUp(self):
+        self.root = office.read_document(FIX)
+
+    def test_list_events_finds_the_example(self):
+        evs = tracker.list_events(self.root)
+        self.assertEqual(len(evs), 1)
+        self.assertIn("Agentic AI Night", evs[0]["title"])
+        # 4wk,3wk,2wk,1wk,day-before,day-of,next-day,follow-ups
+        self.assertEqual(len(evs[0]["phase_tables"]), 8)
+
+    def test_read_event_details_and_tasks(self):
+        ev = tracker.read_event(self.root, "Agentic AI Night")
+        self.assertEqual(ev["details"]["DATE & TIME"], "Tue · June 24, 2026 · 17:30 — late")
+        self.assertEqual(ev["date"], dt.date(2026, 6, 24))
+        self.assertEqual(ev["phases"][0]["tasks"][0]["status"], "Done")
+
+    def test_read_event_next(self):
+        ev = tracker.read_event(self.root, "next")
+        self.assertIn("Agentic AI Night", ev["title"])

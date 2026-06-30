@@ -3,6 +3,8 @@ date-stamping math. Stdlib-only; pure-Python OOXML editing via office.py."""
 import datetime as dt
 import re
 
+from aaif_meetups import office
+
 _MONTHS = {m: i for i, m in enumerate(
     ["", "jan", "feb", "mar", "apr", "may", "jun",
      "jul", "aug", "sep", "oct", "nov", "dec"])}
@@ -49,3 +51,82 @@ def restamp(due_token, old_event, new_event):
     if parsed is None:
         return due_token
     return format_due(parsed + (new_event - old_event))
+
+
+PHASE_HEADER = ["TASK", "OWNER", "DUE", "STATUS"]
+
+
+def _row_cells_text(tbl, row_index):
+    rs = office.rows(tbl)
+    if not rs:
+        return []
+    return [office.cell_text(c) for c in office.cells(rs[row_index])]
+
+
+def is_detail_table(tbl):
+    cells0 = _row_cells_text(tbl, 0)
+    return bool(cells0) and cells0[0] == "EVENT TITLE"
+
+
+def is_phase_table(tbl):
+    return _row_cells_text(tbl, 0) == PHASE_HEADER
+
+
+def list_events(root):
+    events, current = [], None
+    for tbl in office.tables(root):
+        if is_detail_table(tbl):
+            details = {}
+            for r in office.rows(tbl):
+                cs = office.cells(r)
+                if len(cs) >= 2:
+                    details[office.cell_text(cs[0])] = office.cell_text(cs[1])
+            title = details.get("EVENT TITLE", "")
+            try:
+                date = parse_event_date(details.get("DATE & TIME", ""))
+            except ValueError:
+                date = None
+            current = {"title": title, "detail_table": tbl,
+                       "phase_tables": [], "date": date}
+            events.append(current)
+        elif is_phase_table(tbl) and current is not None:
+            current["phase_tables"].append(tbl)
+    return events
+
+
+def _select(events, event):
+    key = (event or "").strip().lower()
+    dated = [e for e in events if e["date"]]
+    if key == "next":
+        if not dated:
+            return None
+        future = sorted([e for e in dated if e["date"] >= dt.date.today()],
+                        key=lambda e: e["date"])
+        return (future or sorted(dated, key=lambda e: e["date"]))[0]
+    if key == "latest":
+        return max(dated, key=lambda e: e["date"]) if dated else None
+    for e in events:
+        if key in e["title"].lower():
+            return e
+    return None
+
+
+def read_event(root, event):
+    events = list_events(root)
+    e = _select(events, event)
+    if e is None:
+        raise LookupError("no event matching %r" % event)
+    details = {}
+    for r in office.rows(e["detail_table"]):
+        cs = office.cells(r)
+        if len(cs) >= 2:
+            details[office.cell_text(cs[0])] = office.cell_text(cs[1])
+    phases = []
+    for pt in e["phase_tables"]:
+        tasks = []
+        for r in office.rows(pt)[1:]:
+            cs = [office.cell_text(c) for c in office.cells(r)]
+            cs += [""] * (4 - len(cs))
+            tasks.append({"task": cs[0], "owner": cs[1], "due": cs[2], "status": cs[3]})
+        phases.append({"tasks": tasks})
+    return {"title": e["title"], "details": details, "phases": phases, "date": e["date"]}
