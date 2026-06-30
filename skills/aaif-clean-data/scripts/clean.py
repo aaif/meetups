@@ -249,7 +249,7 @@ def install_flags():
         # (it must not turn the row bright red). It's surfaced by `scan` instead.
         parts = []
         if email:
-            parts.append(f'IF(ISNUMBER(SEARCH("@",${email}2:${email})),"","missing/bad email; ")')
+            parts.append(f'IF(REGEXMATCH(${email}2:${email},"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"),"","missing/bad email; ")')
         if link:
             parts.append(f'IF(REGEXMATCH(LOWER(${link}2:${link}),"linkedin\\.com/"),"","bad LinkedIn; ")')
         concat = "&".join(parts) if parts else '""'

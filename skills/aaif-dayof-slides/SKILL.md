@@ -1,7 +1,7 @@
 ---
 name: aaif-dayof-slides
 description: Turn an event's tracker entry into the slide text for the AAIF "Day of Event" deck. Use when asked to fill/write the day-of slides or event deck for an AAIF meetup.
-argument-hint: [event title / paste tracker entry]
+argument-hint: '[event title / paste tracker entry]'
 ---
 
 # AAIF Day-of Slides (from the tracker)

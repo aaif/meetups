@@ -43,7 +43,13 @@ def fetch(tab):
         sys.exit(f"gws error reading {tab}: {out.stderr.strip()}")
     # gws prints a keyring banner line before the JSON; find the JSON start.
     txt = out.stdout
-    data = json.loads(txt[txt.index("{"):])
+    start = txt.find("{")
+    if start < 0:
+        sys.exit(f"gws returned no JSON for {tab} (got: {txt.strip()[:200]!r})")
+    try:
+        data = json.loads(txt[start:])
+    except json.JSONDecodeError as e:
+        sys.exit(f"gws returned invalid JSON for {tab}: {e}")
     vals = data.get("values", [])
     if not vals:
         return [], []

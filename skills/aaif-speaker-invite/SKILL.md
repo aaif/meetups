@@ -1,7 +1,7 @@
 ---
 name: aaif-speaker-invite
 description: Write a short, warm speaker-invite DM or email for an AAIF in-person meetup. Use when asked to draft a speaker invite, outreach DM, or ask-someone-to-speak message for an AAIF event.
-argument-hint: [speaker name + event / paste tracker entry]
+argument-hint: '[speaker name + event / paste tracker entry]'
 ---
 
 # AAIF Speaker Outreach / Invite

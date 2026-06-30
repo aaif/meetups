@@ -1,7 +1,7 @@
 ---
 name: aaif-recap-post
 description: Write the post-event LinkedIn recap for an AAIF meetup (posted within 48 hours, with photos). Use when asked to draft the recap, thank-you, or wrap-up post after an AAIF event.
-argument-hint: [event title / paste tracker entry]
+argument-hint: '[event title / paste tracker entry]'
 ---
 
 # AAIF Post-Event Recap (LinkedIn)
