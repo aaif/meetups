@@ -1,0 +1,32 @@
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - uses: pre-commit/action@v3.0.1   # runs `pre-commit run --all-files`
+
+  plugin-validate:
+    # Anthropic's own validator. The repo root is both the marketplace and the
+    # single plugin (marketplace source "./"), so one call validates both the
+    # marketplace.json and the plugin.json schema. SKILL.md frontmatter is
+    # covered by the check-skill-frontmatter hook in the pre-commit job above.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate marketplace and plugin manifests
+        run: claude plugin validate .
