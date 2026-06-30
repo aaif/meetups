@@ -23,7 +23,7 @@ Usage:
   # Test the text engine on a local folder of .pptx/.docx/.xlsx (no Drive):
   python create_chapter.py --city "Los Angeles" --rebrand-local ./somedir
 """
-import argparse, html, json, os, re, subprocess, sys, time, unicodedata, urllib.request, zipfile
+import argparse, html, json, os, re, subprocess, sys, time, unicodedata, urllib.error, urllib.request, zipfile
 
 CHAPTERS_PARENT = "1IQ1K7aVOKUUkxAcfLuNjdETEnmavvtjx"   # the "Chapters" Drive folder
 TEMPLATE_FOLDER = "1PHvEgqnHo0RrsFyA47O9iRJGaKehC8Eg"   # the "TemplateCity" folder
@@ -183,8 +183,15 @@ def gws_json(*args, params=None, body=None):
     if body is not None:
         cmd += ["--json", json.dumps(body)]
     out = _gws(cmd)
-    s = "\n".join(l for l in out.splitlines() if "keyring backend" not in l)
-    return json.loads(s) if s.strip() else {}
+    s = "\n".join(l for l in out.splitlines() if "keyring backend" not in l).strip()
+    if not s:
+        # Empty-but-successful stdout would silently become {} -> an empty file
+        # list -> a subtree that fails to clone while the run still says "Done".
+        raise RuntimeError("gws produced no JSON output for: %s" % " ".join(args))
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        raise RuntimeError("gws returned non-JSON output for %s: %s" % (" ".join(args), s[:200]))
 
 def gws_download(file_id, out):
     # gws rejects --output paths outside its cwd, so run it in the file's dir.
@@ -216,15 +223,20 @@ def copy_file(file_id, name, parent):
                     params={"fileId": file_id, "supportsAllDrives": True},
                     body={"name": name, "parents": [parent]})["id"]
 
-def luma_ok(slug):
+def luma_status(slug):
+    """Return 'live' (HTTP 200), 'absent' (HTTP 404), or 'unknown' (could not
+    verify: timeout, DNS/SSL, 403/429/5xx). Never report a hard 404 for a
+    failure we could not actually confirm."""
     # Luma rejects HEAD and bare urllib UAs with 403; use GET + a browser UA.
     req = urllib.request.Request("https://luma.com/aaif-" + slug, method="GET",
                                  headers={"User-Agent": "Mozilla/5.0"})
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
-            return r.status == 200
+            return "live" if r.status == 200 else "unknown"
+    except urllib.error.HTTPError as e:
+        return "absent" if e.code == 404 else "unknown"
     except Exception:
-        return False
+        return "unknown"
 
 # ----------------------------------------------------------------------------
 def clone_and_rebrand(folder_id, parent, name, ctx, indent=""):
@@ -245,6 +257,8 @@ def clone_and_rebrand(folder_id, parent, name, ctx, indent=""):
                 if n:
                     gws_upload(copy_id, tmp, MIME_BY_EXT[ext])
                 left = residual_tokens(tmp)
+                if left:
+                    ctx["residuals"].append((cname, left))
                 flag = "  !! residual %s" % left if left else ""
                 print("%s  - %s (%d parts)%s" % (indent, cname, n, flag))
                 os.remove(tmp)
@@ -269,17 +283,26 @@ def main():
     print("Slug : aaif-%s  ->  https://luma.com/aaif-%s" % (slug, slug))
 
     if a.rebrand_local:
+        residual_any = False
         for root, _d, files in os.walk(a.rebrand_local):
             for f in files:
                 if os.path.splitext(f)[1].lower() in MIME_BY_EXT:
                     p = os.path.join(root, f)
                     n = rebrand_file(p, name, upper, slug)
                     left = residual_tokens(p)
+                    if left:
+                        residual_any = True
                     print("  %s: %d parts%s" % (f, n, ("  !! " + str(left)) if left else ""))
+        if residual_any:
+            sys.exit("FAIL: residual source tokens remain after rebrand (see !! above).")
         return
 
-    ok = luma_ok(slug)
-    print("Luma : %s" % ("LIVE (200)" if ok else "NOT LIVE (404) - create the page at luma.com, or pass --slug"))
+    status = luma_status(slug)
+    print("Luma : %s" % {
+        "live": "LIVE (200)",
+        "absent": "NOT LIVE (404) - create the page at luma.com, or pass --slug",
+        "unknown": "COULD NOT VERIFY - network error reaching luma.com; check aaif-%s manually" % slug,
+    }[status])
 
     existing = [c for c in list_children(CHAPTERS_PARENT)
                 if c["name"].lower() == name.lower() and c["mimeType"] == FOLDER]
@@ -288,19 +311,28 @@ def main():
 
     if a.dry_run:
         print("\n[dry-run] Would clone TemplateCity -> %r under Chapters and rebrand all files." % name)
-        if not ok:
+        if status == "absent":
             print("[dry-run] WARNING: Luma page aaif-%s is not live yet." % slug)
+        elif status == "unknown":
+            print("[dry-run] NOTE: could not verify the Luma page aaif-%s; check it manually." % slug)
         return
 
-    ctx = {"name": name, "upper": upper, "slug": slug,
+    ctx = {"name": name, "upper": upper, "slug": slug, "residuals": [],
            "tmp": os.path.join(os.environ.get("TMPDIR", "/tmp"), "aaif_chapter")}
     os.makedirs(ctx["tmp"], exist_ok=True)
     print()
     new_id = clone_and_rebrand(TEMPLATE_FOLDER, CHAPTERS_PARENT, name, ctx)
     print("\nDone. New chapter folder id: %s" % new_id)
     print("https://drive.google.com/drive/folders/%s" % new_id)
-    if not ok:
+    if status == "absent":
         print("REMINDER: create the Luma page at https://luma.com/aaif-%s (it is not live yet)." % slug)
+    elif status == "unknown":
+        print("REMINDER: could not verify the Luma page aaif-%s; check it manually at luma.com." % slug)
+    if ctx["residuals"]:
+        print("\nWARNING: %d file(s) still contain source tokens after rebrand:" % len(ctx["residuals"]))
+        for fn, toks in ctx["residuals"]:
+            print("  - %s: %s" % (fn, toks))
+        sys.exit("The new folder is NOT clean - fix the template or rebrand engine and re-run.")
 
 if __name__ == "__main__":
     main()

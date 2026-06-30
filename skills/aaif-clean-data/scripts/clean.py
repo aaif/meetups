@@ -122,11 +122,18 @@ def idx(hdr, name):
 def scan():
     hdr, rows = read_tab(SOURCE)
     ni, ei, li, ci = (idx(hdr, h) for h in (H_NAME, H_EMAIL, H_LINKEDIN, H_CITY))
+    # Reading by header name survives a reorder, not a *rename*: if a required
+    # column is gone, fail loudly instead of reporting "nothing to fix".
+    missing = [h for h, i in ((H_NAME, ni), (H_EMAIL, ei)) if i is None]
+    if missing:
+        sys.exit("ABORT: required column(s) %s not found in %r tab. Headers present: %s"
+                 % (", ".join(missing), SOURCE, hdr))
     ri = idx(hdr, "Resolved City")  # if filled, City="Other" is already resolved
     changes, flags = [], []
     seen_email = {}
     for rn, row in enumerate(rows, start=2):
-        if ni is None or not (row[ni] or row[ei] or "").strip():
+        # ni/ei guaranteed non-None above, so row[ni]/row[ei] are safe.
+        if not (row[ni] or row[ei] or "").strip():
             continue
         def prop(i, fn, header):
             if i is None:

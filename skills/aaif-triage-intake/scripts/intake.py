@@ -65,9 +65,16 @@ def collect(status_filter, show_all):
             continue
         si = col(headers, "Status")
         ti = col(headers, "Timestamp")  # real-row marker (always present from the form)
+        # A missing marker/status column means a header rename, not an empty
+        # queue — fail loudly rather than silently reporting "0 awaiting review".
+        if ti is None:
+            sys.exit(f"ABORT: tab {tab!r} has no 'Timestamp' column; headers present: {headers}")
+        if si is None and not show_all:
+            sys.exit(f"ABORT: tab {tab!r} has no 'Status' column to filter on; "
+                     f"pass --all or fix the header. Headers present: {headers}")
         picked = []
         for rn, row in enumerate(rows, start=2):  # row 2 = first data row
-            if ti is None or not (row[ti] or "").strip():
+            if not (row[ti] or "").strip():
                 continue  # skip empty trailing rows (no Timestamp)
             status = (row[si].strip() if si is not None else "")
             if not show_all and status not in status_filter:
