@@ -16,7 +16,8 @@ FRONTMATTER = re.compile(r"^---\n(.*?)\n---", re.S)
 
 
 def check(path: str) -> list[str]:
-    text = open(path, encoding="utf-8").read()
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
     m = FRONTMATTER.match(text)
     if not m:
         return [f"{path}: no `---` YAML frontmatter block at the top of the file"]

@@ -1,7 +1,7 @@
 ---
 name: aaif-luma-description
 description: Write the Luma event-page description for an AAIF in-person meetup. Use when asked to draft the Luma description / event page copy for an AAIF event.
-argument-hint: [event title / paste tracker entry]
+argument-hint: '[event title / paste tracker entry]'
 ---
 
 # AAIF Luma Event Description

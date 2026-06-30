@@ -75,7 +75,19 @@ Install it, then authenticate with one of:
 - **Pre‑obtained token:** set `GOOGLE_WORKSPACE_CLI_TOKEN=<access_token>`
 - **Client app:** set `GOOGLE_WORKSPACE_CLI_CLIENT_ID` and `GOOGLE_WORKSPACE_CLI_CLIENT_SECRET`, then `gws auth login`
 
-On your Google Cloud project, enable the **Sheets**, **Drive**, and **Docs** APIs.
+On your Google Cloud project, enable the **Sheets**, **Drive**, **Docs**, and
+**Forms** APIs.
+
+**OAuth scopes.** The ops skills *read and write* Sheets/Drive (clone, rebrand,
+clean) and read Form responses, so grant **read-write** scopes — read-only access
+passes the verify step below but then fails on the first write:
+
+- `https://www.googleapis.com/auth/spreadsheets` — read/write the intake sheet
+- `https://www.googleapis.com/auth/drive` — copy, create, and update Drive files
+  (chapter/series asset clones)
+- `https://www.googleapis.com/auth/forms.body` — read/edit the intake form
+- `https://www.googleapis.com/auth/forms.responses.readonly` — read form responses
+
 Verify with:
 
 ```bash
