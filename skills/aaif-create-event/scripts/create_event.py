@@ -20,6 +20,13 @@ FIELD_MAP = {"title": "EVENT TITLE", "date": "DATE & TIME", "theme": "THEME / SE
              "join": "STREAM / JOIN LINK"}
 
 
+def title_exists(root, title):
+    """True if an event with this EXACT title (case-insensitive) already exists.
+    Exact, not substring — so 'Eval Night' does not match 'Eval Night · Series'."""
+    key = title.strip().lower()
+    return any(key == e["title"].strip().lower() for e in tracker.list_events(root))
+
+
 def apply_local(path, fields, event_date):
     root = office.read_document(path)
     tracker.add_event(root, fields, event_date)
@@ -49,7 +56,7 @@ def main():
     event_date = tracker.parse_event_date(a.date)
     fields = _fields_from_args(a)
     root = office.read_document(a.docx)
-    if any(a.title.lower() in e["title"].lower() for e in tracker.list_events(root)):
+    if title_exists(root, a.title):
         sys.exit("ABORT: an event titled %r already exists in %s." % (a.title, a.docx))
     print("Event: %s  date: %s  (fields set: %s)"
           % (a.title, event_date, ", ".join(sorted(fields)) or "title/date only"))

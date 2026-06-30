@@ -41,6 +41,16 @@ class TestCreateCore(unittest.TestCase):
                     "PLATFORM": "Zoom",
                 }, dt.date(2026, 8, 12))
 
+    def test_title_exists_is_exact_not_substring(self):
+        root = office.read_document(FIX)
+        tracker.add_event(root, {
+            "EVENT TITLE": "Eval Night · Builder Series",
+            "DATE & TIME": "Wed · August 12, 2026 · 18:00 — late",
+        }, dt.date(2026, 8, 12))
+        # exact existing title -> exists; a distinct shorter title -> does not
+        self.assertTrue(create_event.title_exists(root, "Eval Night · Builder Series"))
+        self.assertFalse(create_event.title_exists(root, "Eval Night"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -46,6 +46,10 @@ class TestApplyChanges(unittest.TestCase):
         self.assertIn("speaker bio", stale)
         self.assertIn("Luma cover", stale)
 
+    def test_set_without_equals_raises(self):
+        with self.assertRaises(ValueError):
+            update_event.apply_changes(self.root, "Agentic AI Night", ["SPEAKER(S)"], None)
+
 
 if __name__ == "__main__":
     unittest.main()

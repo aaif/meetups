@@ -30,11 +30,11 @@ deterministic docx edit on a local file.** Prereq: `gws` installed and authentic
 
    ```
    # add/replace a speaker
-   python skills/aaif-update-event/scripts/update_event.py tracker.docx "Agentic AI Night" \
+   python3 ${CLAUDE_SKILL_DIR}/scripts/update_event.py tracker.docx "Agentic AI Night" \
      --set "SPEAKER(S)=Jane Doe (Agent Infra)"
 
    # move the date (recomputes all due-dates from the original date)
-   python skills/aaif-update-event/scripts/update_event.py tracker.docx "Agentic AI Night" \
+   python3 ${CLAUDE_SKILL_DIR}/scripts/update_event.py tracker.docx "Agentic AI Night" \
      --date "Wed · July 8, 2026 · 17:30 — late"
    ```
    The event argument matches an **exact** (case-insensitive) title first, then a

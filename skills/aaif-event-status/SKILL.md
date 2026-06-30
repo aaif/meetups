@@ -36,7 +36,7 @@ deterministic parsing of a local file.** Prereq: `gws` installed and authenticat
 3. **Run the digest** (read-only, local):
 
    ```
-   python skills/aaif-event-status/scripts/event_status.py tracker.docx ["event"]
+   python3 ${CLAUDE_SKILL_DIR}/scripts/event_status.py tracker.docx ["event"]
    ```
 
 Status is computed against today from each task's DUE cell; clock-time day-of tasks and

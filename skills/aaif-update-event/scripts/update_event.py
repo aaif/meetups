@@ -20,6 +20,8 @@ def apply_changes(root, event, set_pairs, date_str):
     then write the authoritative new DATE & TIME string. Returns the stale-asset set."""
     stale = set()
     for pair in set_pairs:
+        if "=" not in pair:
+            raise ValueError("--set must be LABEL=VALUE (got %r)" % pair)
         label, _, value = pair.partition("=")
         tracker.set_field(root, event, label.strip(), value.strip())
         if "SPEAKER" in label.upper():

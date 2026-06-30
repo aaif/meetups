@@ -33,14 +33,14 @@ deterministic docx edit on a local file.** Prereq: `gws` installed and authentic
 
    ```
    # in-person (chapter) tracker
-   python skills/aaif-create-event/scripts/create_event.py tracker.docx \
+   python3 ${CLAUDE_SKILL_DIR}/scripts/create_event.py tracker.docx \
      --title "Eval Night · Builder Series" \
      --date "Wed · August 12, 2026 · 18:00 — late" \
      [--theme ...] [--venue ...] [--location ...] [--speakers ...] \
      [--luma ...] [--capacity ...] [--organizer ...] [--dry-run]
 
    # online (series) tracker — use --platform / --join, NOT --venue / --location
-   python skills/aaif-create-event/scripts/create_event.py tracker.docx \
+   python3 ${CLAUDE_SKILL_DIR}/scripts/create_event.py tracker.docx \
      --title "..." --date "..." [--platform "Zoom Webinar"] [--join "lu.ma/..."] ...
    ```
    Flags must match the tracker's labels: a chapter tracker has `VENUE` /
