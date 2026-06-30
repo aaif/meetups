@@ -75,16 +75,22 @@ Install it, then authenticate with one of:
 - **Pre‑obtained token:** set `GOOGLE_WORKSPACE_CLI_TOKEN=<access_token>`
 - **Client app:** set `GOOGLE_WORKSPACE_CLI_CLIENT_ID` and `GOOGLE_WORKSPACE_CLI_CLIENT_SECRET`, then `gws auth login`
 
-On your Google Cloud project, enable the **Sheets**, **Drive**, **Docs**, and
-**Forms** APIs.
+On your Google Cloud project, enable the **Sheets**, **Docs**, **Slides**,
+**Drive**, and **Forms** APIs.
 
-**OAuth scopes.** The ops skills *read and write* Sheets/Drive (clone, rebrand,
-clean) and read Form responses, so grant **read-write** scopes — read-only access
-passes the verify step below but then fails on the first write:
+**OAuth scopes.** Grant **read-write** scopes for anything you write to —
+read-only access passes the verify step below but then fails on the first write
+(form responses are read-only by nature, hence the `.readonly` scope). The
+bundled scripts use only the Sheets and Drive scopes; the Docs, Slides, and Forms
+scopes are for operating on those assets directly — the chapter/series source docs
+and decks, and the intake form (e.g. via Claude's Google connector or an MCP
+server):
 
-- `https://www.googleapis.com/auth/spreadsheets` — read/write the intake sheet
-- `https://www.googleapis.com/auth/drive` — copy, create, and update Drive files
-  (chapter/series asset clones)
+- `https://www.googleapis.com/auth/spreadsheets` — read/write the intake sheet *(scripts)*
+- `https://www.googleapis.com/auth/drive` — copy, create, and update Drive files,
+  incl. chapter/series asset clones *(scripts)*
+- `https://www.googleapis.com/auth/documents` — read/edit chapter/series Docs
+- `https://www.googleapis.com/auth/presentations` — read/edit day-of / series Slides
 - `https://www.googleapis.com/auth/forms.body` — read/edit the intake form
 - `https://www.googleapis.com/auth/forms.responses.readonly` — read form responses
 
