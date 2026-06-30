@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""Read-only status digest for a chapter/series Event Tracker: overdue and
+due-soon tasks grouped by owner. Reads via the gws CLI; pure-Python parsing."""
+import argparse
+import datetime as dt
+import os
+import pathlib
+import sys
+import tempfile
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "lib"))
+from aaif_meetups import gws_cli, office, tracker  # noqa: E402
+
+DUE_SOON_DAYS = 7
+
+
+def classify(tasks, anchor, today):
+    overdue, due_soon = [], []
+    for t in tasks:
+        d = tracker.parse_due(t.get("due", ""), anchor)
+        if d is None or t.get("status") == "Done":
+            continue
+        if d < today:
+            overdue.append(t)
+        elif (d - today).days <= DUE_SOON_DAYS:
+            due_soon.append(t)
+    return {"overdue": overdue, "due_soon": due_soon}
+
+
+def _digest(ev, today):
+    flat = [t for ph in ev["phases"] for t in ph["tasks"]]
+    res = classify(flat, ev["date"] or today, today)
+    lines = ["", "== %s ==" % ev["title"],
+             "%d overdue, %d due within %d days"
+             % (len(res["overdue"]), len(res["due_soon"]), DUE_SOON_DAYS)]
+    for label in ("overdue", "due_soon"):
+        if res[label]:
+            lines.append("  %s:" % label.replace("_", "-"))
+            for t in sorted(res[label], key=lambda x: x.get("owner", "")):
+                lines.append("    [%s] %s (due %s)" % (t["owner"], t["task"], t["due"]))
+    return "\n".join(lines)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("group", help="chapter or series name")
+    ap.add_argument("event", nargs="?", help="optional event title; default all")
+    a = ap.parse_args()
+    loc = tracker.locate_tracker(a.group)
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "tracker.docx")
+        gws_cli.gws_download(loc["file_id"], path)
+        root = office.read_document(path)
+        events = tracker.list_events(root)
+        if a.event:
+            events = [e for e in events if a.event.lower() in e["title"].lower()]
+        today = dt.date.today()
+        print("%s (%s) — %d event(s)" % (loc["folder_name"], loc["kind"], len(events)))
+        for e in events:
+            print(_digest(tracker.read_event(root, e["title"]), today))
+
+
+if __name__ == "__main__":
+    main()
