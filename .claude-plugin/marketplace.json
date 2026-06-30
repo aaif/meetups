@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "aaif",
+  "owner": {
+    "name": "AAIF",
+    "url": "https://github.com/aaif"
+  },
+  "description": "Official marketplace for AAIF (Agentic AI Foundation) community meetup tooling.",
+  "plugins": [
+    {
+      "name": "aaif-meetups",
+      "source": "./",
+      "description": "Skills for running AAIF in-person and online meetups: event content writing and chapter/series/community ops.",
+      "category": "community",
+      "tags": ["meetups", "events", "community", "content", "google-workspace", "online"]
+    }
+  ]
+}

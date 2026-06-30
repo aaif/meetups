@@ -1,0 +1,95 @@
+---
+name: aaif-create-online-series
+description: Create a new AAIF online event series in the "Online" Google Drive folder by cloning TemplateSeries and rebranding all assets. Use when asked to add/launch/set up a new AAIF online series (reading group, paper club, webinar, online discussion) — not a city chapter.
+argument-hint: '<Series Name> [--slug <lumaslug>]'
+---
+
+# Create AAIF Online Series
+
+Spin up a new AAIF **online event series** (e.g. a Reading Group, a Paper Club) by
+cloning the **TemplateSeries** folder in the top-level **Online** Google Drive
+folder and rebranding every Office file from San Francisco to the new series. This
+is the online sibling of [aaif-create-chapter]: same folder shape — `Event
+Tracker.docx`, `Attendee CRM.xlsx`, `SKILLS.md.docx`, and the `Event Name/` +
+`Banners (...)/` subfolders of `.pptx` design assets — but the **Event Tracker is
+the no-venue "online" runbook** (platform / join link / tech check / recording /
+chat-Q&A moderation instead of venue / A-V / food / door).
+
+Online series live under **Online/**, NOT under Chapters/. Use a city chapter
+(aaif-create-chapter) for an in-person, city-based community; use this for a
+recurring online program with no venue.
+
+Prereq: the `gws` CLI must be installed and authenticated (see the user's
+`gws-cli-access` memory). All Drive calls go through it.
+
+## What gets replaced (and what does NOT)
+
+The rebrand swaps two tokens and leaves everything else alone. Event-specific
+content — the example-event block (dates, speakers, example title), the agenda —
+is **template content** organizers fill per-event using the prompts in
+`SKILLS.md.docx`. Do not touch it. The TemplateSeries master is already
+series-shaped (no "Chapter" wording in identity; the About blurb is a `[bracketed]`
+placeholder the organizer fills in).
+
+| Token in template | Becomes | Notes |
+|---|---|---|
+| `San Francisco` / `SAN FRANCISCO` | new series, case-matched | contiguous in the clean template |
+| `SF` abbreviation (`AAIF SF …`, doc metadata) | full series name | **UPPER** in all-caps contexts, **Title case** in prose |
+| `aaif-sanfrancisco` / `aaif-sf` (Luma slug, incl. hyperlink targets) | `aaif-<slug>` | see slug rules below |
+
+## Luma slug rules
+
+- Default slug = series lowercased, spaces/accents removed: `Reading Group → readinggroup`.
+- A brand-new series usually has **no live Luma page yet** — the script warns; the
+  page is created manually at luma.com. Pass `--slug` to override.
+- Pages resolve at both `https://luma.com/aaif-<slug>` and `https://lu.ma/aaif-<slug>`.
+
+## Procedure
+
+1. **Confirm the series display name and slug with the user.** Ask for the exact
+   name (e.g. "Reading Group", or "Online Reading Group" if they want the word
+   Online in the title) and the Luma slug if one exists.
+
+2. **Dry run first** to surface the slug, Luma status, and any name collision:
+   ```bash
+   python3 ${CLAUDE_SKILL_DIR}/scripts/create_series.py \
+       --series "Reading Group" --dry-run
+   ```
+   - If it aborts with "already exists", stop — the series is already there.
+   - If Luma shows NOT LIVE, tell the user the page needs creating at
+     `luma.com/aaif-<slug>` (or that the slug differs — re-run with `--slug`).
+
+3. **Create the series:**
+   ```bash
+   python3 ${CLAUDE_SKILL_DIR}/scripts/create_series.py \
+       --series "Reading Group"        # add --slug <x> if overriding
+   ```
+   The script clones TemplateSeries → a new `<Series>` folder under Online, then
+   downloads, rebrands, and re-uploads each `.pptx/.docx/.xlsx` in place. It prints
+   a tree and flags any file with `!! residual` tokens.
+
+4. **Verify & hand off.** Confirm the run printed no `!! residual` flags and report
+   the new folder URL. Remind the user to (a) fill the `[bracketed]` About-the-
+   series blurb in `Event Tracker.docx`, and (b) create the Luma page if it wasn't
+   live.
+
+## How it works / maintenance
+
+`scripts/create_series.py` shares the **same text engine** as aaif-create-chapter
+(paragraph-level concatenate → transform → write-back, robust to OOXML
+run-splitting). Constants at the top: `ONLINE_PARENT` (the Online folder) and
+`TEMPLATE_FOLDER` (TemplateSeries). The master's design decks (`Event Name/`,
+`Slides.pptx`) were authored from the chapter decks with the front-facing brand
+taglines de-chaptered; their **body content may still carry chapter/in-person
+phrasing** ("global network of chapters", "same venue") — that's the organizer-
+customized starting point, same as the example-event block.
+
+To validate the engine after any edit, rebrand a throwaway copy of the template
+and check for residuals + that identity reads right:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/create_series.py \
+    --series "Reading Group" --rebrand-local /path/to/templateseries-copy
+```
+
+The template must stay "clean": `San Francisco` contiguous and the slug normalized
+to `aaif-sanfrancisco`, so the two-token swap stays exhaustive.

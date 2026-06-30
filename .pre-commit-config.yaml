@@ -1,0 +1,62 @@
+# Pre-commit hooks for the AAIF Meetups plugin marketplace.
+#   Setup:  pipx install pre-commit && pre-commit install
+#   Run:    pre-commit run --all-files
+#   Update: pre-commit autoupdate
+# CI runs the same hooks (see .github/workflows/validate.yml).
+
+# Generated/cache artifacts pre-commit should never scan.
+exclude: '^(.*/__pycache__/.*|.*\.pyc)$'
+
+repos:
+  # --- Standard hygiene -------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]   # keep intentional Markdown hard breaks
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-json                          # marketplace.json / plugin.json
+      - id: check-yaml                          # *.yaml/*.yml only (not SKILL.md frontmatter)
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+  # --- Python: Ruff bug-focused lint (config in pyproject.toml) ---------------
+  # Lint only (pyflakes + syntax), no reformatting. `--fix` still auto-removes
+  # unused imports/vars but never restyles code; the helper scripts use a
+  # deliberately compact style. A formatting sweep, if wanted, is its own PR.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.20
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+
+  # --- Spelling (allowlist in pyproject.toml [tool.codespell]) ----------------
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.2
+    hooks:
+      - id: codespell
+        additional_dependencies: [tomli]
+
+  # --- Secret scanning (these scripts shell out + use urllib) -----------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # --- SKILL.md frontmatter syntax (broken YAML => empty metadata at runtime) --
+  # Runs locally on commit and in CI; this hook — not `claude plugin validate`,
+  # which only checks the manifest schemas — is what catches skill frontmatter.
+  - repo: local
+    hooks:
+      - id: check-skill-frontmatter
+        name: validate SKILL.md YAML frontmatter
+        entry: python3 scripts/check_frontmatter.py
+        language: python
+        additional_dependencies: [pyyaml]
+        files: 'SKILL\.md$'
