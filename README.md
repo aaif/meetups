@@ -78,11 +78,13 @@ Install it, then authenticate with one of:
 On your Google Cloud project, enable the **Sheets**, **Docs**, **Slides**,
 **Drive**, and **Forms** APIs.
 
-**OAuth scopes.** Grant **read-write** scopes — read-only access passes the verify
-step below but then fails on the first write. The bundled scripts use only the
-Sheets and Drive scopes; the Docs, Slides, and Forms scopes are for operating on
-those assets directly (interactive ops via the connector/MCP, and the
-chapter/series source docs and decks):
+**OAuth scopes.** Grant **read-write** scopes for anything you write to —
+read-only access passes the verify step below but then fails on the first write
+(form responses are read-only by nature, hence the `.readonly` scope). The
+bundled scripts use only the Sheets and Drive scopes; the Docs, Slides, and Forms
+scopes are for operating on those assets directly — the chapter/series source docs
+and decks, and the intake form (e.g. via Claude's Google connector or an MCP
+server):
 
 - `https://www.googleapis.com/auth/spreadsheets` — read/write the intake sheet *(scripts)*
 - `https://www.googleapis.com/auth/drive` — copy, create, and update Drive files,
