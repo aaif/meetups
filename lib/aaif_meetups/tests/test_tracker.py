@@ -70,3 +70,32 @@ class TestWrites(unittest.TestCase):
         # day-of clock times unchanged
         dayof = ev["phases"][5]["tasks"][0]["due"]
         self.assertRegex(dayof, r"^\d{1,2}:\d{2}$")
+
+
+class TestAddEvent(unittest.TestCase):
+    def setUp(self):
+        self.root = office.read_document(FIX)
+
+    def test_add_event_appends_section(self):
+        before = len(tracker.list_events(self.root))
+        tracker.add_event(self.root, {
+            "EVENT TITLE": "Eval Night · Builder Series",
+            "DATE & TIME": "Wed · August 12, 2026 · 18:00 — late",
+            "SPEAKER(S)": "TBD",
+        }, dt.date(2026, 8, 12))
+        evs = tracker.list_events(self.root)
+        self.assertEqual(len(evs), before + 1)
+        new = tracker.read_event(self.root, "Eval Night")
+        self.assertEqual(new["details"]["EVENT TITLE"], "Eval Night · Builder Series")
+        # statuses reset
+        self.assertTrue(all(t["status"] == "Not started"
+                            for ph in new["phases"] for t in ph["tasks"]))
+        # dates restamped to the new event date (4-wks-out is ~28 days before Aug 12)
+        self.assertNotEqual(new["phases"][0]["tasks"][0]["due"], "May 27")
+        # the appended section survives a save -> reload (no corruption)
+        import tempfile
+        with tempfile.TemporaryDirectory() as dd:
+            out = os.path.join(dd, "out.docx")
+            office.save_document(FIX, self.root, out)
+            reloaded = office.read_document(out)
+            self.assertEqual(len(tracker.list_events(reloaded)), before + 1)

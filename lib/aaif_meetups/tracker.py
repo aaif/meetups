@@ -1,5 +1,6 @@
 """Event-aware reads/writes over an Event Tracker.docx, plus the shared
 date-stamping math. Stdlib-only; pure-Python OOXML editing via office.py."""
+import copy
 import datetime as dt
 import re
 
@@ -191,3 +192,38 @@ def set_due_dates(root, event, new_event_date):
     if e["date"] is None:
         raise ValueError("event has no parseable current date; cannot restamp")
     return _restamp_tables(e["detail_table"], e["phase_tables"], e["date"], new_event_date)
+
+
+def _body(root):
+    return root.find(office.W + "body")
+
+
+def add_event(root, fields, event_date):
+    events = list_events(root)
+    if not events:
+        raise LookupError("tracker has no example event section to clone")
+    example = events[0]
+    old_date = example["date"]
+    body = _body(root)
+    kids = list(body)
+    # span: the paragraph immediately before the detail table .. the last phase table
+    detail_idx = kids.index(example["detail_table"])
+    start = detail_idx - 1 if detail_idx > 0 and kids[detail_idx - 1].tag == office.W + "p" else detail_idx
+    last = example["phase_tables"][-1] if example["phase_tables"] else example["detail_table"]
+    end = kids.index(last)
+    block = [copy.deepcopy(kids[i]) for i in range(start, end + 1)]
+    # edit the CLONED elements directly (no re-selection against the original)
+    new_detail = next(el for el in block
+                      if el.tag == office.W + "tbl" and is_detail_table(el))
+    new_phases = [el for el in block
+                  if el.tag == office.W + "tbl" and is_phase_table(el)]
+    for label, value in fields.items():
+        _set_detail(new_detail, label, value)
+    if old_date is not None:
+        _restamp_tables(new_detail, new_phases, old_date, event_date)
+    _reset_status(new_phases)
+    # insert before trailing sectPr if present, else at end
+    sectpr = body.find(office.W + "sectPr")
+    insert_at = kids.index(sectpr) if sectpr is not None else len(kids)
+    for offset, el in enumerate(block):
+        body.insert(insert_at + offset, el)
