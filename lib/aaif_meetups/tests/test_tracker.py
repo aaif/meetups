@@ -50,3 +50,23 @@ class TestEventModel(unittest.TestCase):
     def test_read_event_next(self):
         ev = tracker.read_event(self.root, "next")
         self.assertIn("Agentic AI Night", ev["title"])
+
+
+class TestWrites(unittest.TestCase):
+    def setUp(self):
+        self.root = office.read_document(FIX)
+
+    def test_set_field(self):
+        tracker.set_field(self.root, "Agentic AI Night", "SPEAKER(S)", "Jane Doe (Infra)")
+        ev = tracker.read_event(self.root, "Agentic AI Night")
+        self.assertEqual(ev["details"]["SPEAKER(S)"], "Jane Doe (Infra)")
+
+    def test_set_due_dates_shifts_two_weeks(self):
+        # original 4-weeks-out task due "May 27"; +14 days -> "Jun 10"
+        changed = tracker.set_due_dates(self.root, "Agentic AI Night", dt.date(2026, 7, 8))
+        self.assertGreater(changed, 0)
+        ev = tracker.read_event(self.root, "Agentic AI Night")
+        self.assertEqual(ev["phases"][0]["tasks"][0]["due"], "Jun 10")
+        # day-of clock times unchanged
+        dayof = ev["phases"][5]["tasks"][0]["due"]
+        self.assertRegex(dayof, r"^\d{1,2}:\d{2}$")
