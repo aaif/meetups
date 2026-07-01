@@ -10,7 +10,7 @@ Spin up a new AAIF **online event series** (e.g. a Reading Group, a Paper Club) 
 cloning the **TemplateSeries** folder in the top-level **Online** Google Drive
 folder and rebranding every Office file from San Francisco to the new series. This
 is the online sibling of [aaif-create-chapter]: same folder shape — `Event
-Tracker.docx`, `Attendee CRM.xlsx`, and the `Event Name/` + `Banners (...)/`
+Tracker.docx`, `Attendee CRM.xlsx`, and the `Event Template/` + `Banners (...)/`
 subfolders of `.pptx` design assets — but the **Event Tracker is
 the no-venue "online" runbook** (platform / join link / tech check / recording /
 chat-Q&A moderation instead of venue / A-V / food / door).
@@ -78,7 +78,7 @@ placeholder the organizer fills in).
 `scripts/create_series.py` shares the **same text engine** as aaif-create-chapter
 (paragraph-level concatenate → transform → write-back, robust to OOXML
 run-splitting). Constants at the top: `ONLINE_PARENT` (the Online folder) and
-`TEMPLATE_FOLDER` (TemplateSeries). The master's design decks (`Event Name/`,
+`TEMPLATE_FOLDER` (TemplateSeries). The master's design decks (`Event Template/`,
 `Slides.pptx`) were authored from the chapter decks with the front-facing brand
 taglines de-chaptered; their **body content may still carry chapter/in-person
 phrasing** ("global network of chapters", "same venue") — that's the organizer-
