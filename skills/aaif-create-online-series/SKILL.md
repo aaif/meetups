@@ -10,8 +10,8 @@ Spin up a new AAIF **online event series** (e.g. a Reading Group, a Paper Club) 
 cloning the **TemplateSeries** folder in the top-level **Online** Google Drive
 folder and rebranding every Office file from San Francisco to the new series. This
 is the online sibling of [aaif-create-chapter]: same folder shape — `Event
-Tracker.docx`, `Attendee CRM.xlsx`, `SKILLS.md.docx`, and the `Event Name/` +
-`Banners (...)/` subfolders of `.pptx` design assets — but the **Event Tracker is
+Tracker.docx`, `Attendee CRM.xlsx`, and the `Event Name/` + `Banners (...)/`
+subfolders of `.pptx` design assets — but the **Event Tracker is
 the no-venue "online" runbook** (platform / join link / tech check / recording /
 chat-Q&A moderation instead of venue / A-V / food / door).
 
@@ -26,8 +26,8 @@ Prereq: the `gws` CLI must be installed and authenticated (see the user's
 
 The rebrand swaps two tokens and leaves everything else alone. Event-specific
 content — the example-event block (dates, speakers, example title), the agenda —
-is **template content** organizers fill per-event using the prompts in
-`SKILLS.md.docx`. Do not touch it. The TemplateSeries master is already
+is **template content** organizers fill per-event using the `aaif-*` content
+skills in this repo. Do not touch it. The TemplateSeries master is already
 series-shaped (no "Chapter" wording in identity; the About blurb is a `[bracketed]`
 placeholder the organizer fills in).
 

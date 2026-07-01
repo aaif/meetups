@@ -4,12 +4,13 @@ rebranding every Office file from "San Francisco" to the new series.
 
 Online series (e.g. a Reading Group, a Paper Club) live under the top-level
 **Online/** folder, NOT under Chapters/. They are the online-event sibling of a
-city chapter: same folder shape (Event Tracker, Attendee CRM, SKILLS, Event Name/
+city chapter: same folder shape (Event Tracker, Attendee CRM, Event Name/
 design assets, Banners/), but the Event Tracker is the no-venue "online" runbook
 (platform / join link / recording / chat-Q&A instead of venue / A-V / door).
 
 Two replacement tokens are swapped (event content like dates/speakers/the example
-block is left untouched - organizers fill that per-event using the SKILLS prompts):
+block is left untouched - organizers fill that per-event using the aaif-* content
+skills in this repo, e.g. aaif-speaker-bio / aaif-luma-description):
 
   1. Series name "San Francisco" / "SAN FRANCISCO" -> new series (case matched)
                  plus the "SF" abbreviation (AAIF SF, ...) -> new series, upper in

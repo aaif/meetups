@@ -3,7 +3,8 @@
 rebranding every Office file from "San Francisco" to the new city.
 
 Two replacement tokens are swapped (event content like dates/speakers is left
-untouched - organizers fill that per-event using the SKILLS.md prompts):
+untouched - organizers fill that per-event using the aaif-* content skills in
+this repo, e.g. aaif-speaker-bio / aaif-announcement-post / aaif-dayof-slides):
 
   1. City name   "San Francisco" / "SAN FRANCISCO"  -> new city (case matched)
                  plus the "SF" abbreviation (AAIF SF, SF CHAPTER, ...) -> new
