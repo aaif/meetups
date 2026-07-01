@@ -27,11 +27,12 @@ meetup”), or invoke one explicitly with `/aaif-meetups:<skill>`.
 
 Prefer the guided UI flow? Run these inside Claude Code:
 
-1. **Add the marketplace:**
+1. **Add the marketplace** (the full git URL is equivalent to the `aaif/meetups`
+   shorthand used in [Install](#install-claude-code) above):
    ```bash
    /plugin marketplace add https://github.com/aaif/meetups.git#main
    ```
-2. **Enable it:** run `/plugins`, tab to **Marketplaces**, and enable the **aaif**
+2. **Enable it:** run `/plugin`, tab to **Marketplaces**, and enable the **aaif**
    marketplace.
 3. **Turn on auto‑update** for the marketplace so you always get the latest skills.
 4. **Install the plugin:** in that marketplace, browse plugins and install
@@ -44,7 +45,7 @@ Prefer the guided UI flow? Run these inside Claude Code:
    commands autocomplete, then pick one (or just describe your task and the
    matching skill auto‑activates).
 
-   ![Typing /aaif- shows the toolkit's skills autocompleting in Claude Code](assets/aaif-skills-autocomplete.png)
+   ![Typing /aaif- surfaces the toolkit's commands autocompleting in Claude Code](assets/aaif-skills-autocomplete.png)
 
 ---
 
