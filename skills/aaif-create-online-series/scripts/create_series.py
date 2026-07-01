@@ -4,7 +4,7 @@ rebranding every Office file from "San Francisco" to the new series.
 
 Online series (e.g. a Reading Group, a Paper Club) live under the top-level
 **Online/** folder, NOT under Chapters/. They are the online-event sibling of a
-city chapter: same folder shape (Event Tracker, Attendee CRM, Event Name/
+city chapter: same folder shape (Event Tracker, Attendee CRM, Event Template/
 design assets, Banners/), but the Event Tracker is the no-venue "online" runbook
 (platform / join link / recording / chat-Q&A instead of venue / A-V / door).
 

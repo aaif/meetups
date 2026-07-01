@@ -13,7 +13,7 @@ line. **Slide 1 hooks, slide 6 is the CTA.**
 **House voice:** share the practice, never sell the product. Specific over grand,
 builder-to-builder. Signal, not numbers.
 
-**Workflow:** update the LinkedIn Carousel deck (`Event Name/LinkedIn Carousel.pptx`
+**Workflow:** update the LinkedIn Carousel deck (`Event Template/LinkedIn Carousel.pptx`
 in the chapter's Drive folder) with this copy, export it as a PDF, then post the PDF.
 
 ## Input (from the event tracker)

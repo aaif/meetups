@@ -7,7 +7,7 @@ argument-hint: '[event title / paste tracker entry]'
 # AAIF Day-of Slides (from the tracker)
 
 Turn an event's tracker entry into the text for the chapter's **"Day of Event"**
-deck (`Event Name/Slides.pptx`). Fill the per-event slides from the tracker and
+deck (`Event Template/Slides.pptx`). Fill the per-event slides from the tracker and
 **leave the fixed brand slides** (`[FIXED]`: About AAIF, the global-network stats)
 **exactly as written** — they are brand-standard.
 

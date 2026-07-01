@@ -9,7 +9,7 @@ argument-hint: '<City Name> [--slug <lumaslug>]'
 Spin up a new AAIF city "chapter" by cloning the **TemplateCity** folder in the
 **Chapters** Google Drive and rebranding every Office file from San Francisco to
 the new city. Each chapter folder is the standard template: `Event Tracker.docx`,
-`Attendee CRM.xlsx`, and the `Event Name/` + `Banners (...)/` subfolders of `.pptx`
+`Attendee CRM.xlsx`, and the `Event Template/` + `Banners (...)/` subfolders of `.pptx`
 design assets. (The old `SKILLS.md.docx` of paste-into-Claude prompts is retired —
 those prompts now live as the `aaif-*` content skills in this repo.)
 
