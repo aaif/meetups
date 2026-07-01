@@ -21,7 +21,8 @@ also work in claude.ai and the Claude Agent SDK — see [Using in other tools](#
 `marketplace add aaif/meetups` reads `.claude-plugin/marketplace.json` from this
 repo; `@aaif` is the marketplace name. After installing, the skills auto‑activate
 when you describe a matching task (e.g. “draft the announcement post for our July
-meetup”), or invoke one explicitly with `/aaif-meetups:<skill>`.
+meetup”), or invoke one explicitly with `/aaif-<skill>` (e.g.
+`/aaif-announcement-post`).
 
 ### Quickstart (step‑by‑step)
 
@@ -41,9 +42,9 @@ Prefer the guided UI flow? Run these inside Claude Code:
    ```bash
    /reload-plugins
    ```
-6. **Start using the skills:** type `/aaif-` in the prompt to see the toolkit's
-   commands autocomplete, then pick one (or just describe your task and the
-   matching skill auto‑activates).
+6. **Start using the skills:** type `/aaif-` to autocomplete the toolkit's
+   commands (e.g. `/aaif-announcement-post`), or just describe your task and the
+   matching skill auto‑activates.
 
    ![Typing /aaif- surfaces the toolkit's commands autocompleting in Claude Code](assets/aaif-skills-autocomplete.png)
 
