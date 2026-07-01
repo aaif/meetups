@@ -23,6 +23,29 @@ repo; `@aaif` is the marketplace name. After installing, the skills auto‑activ
 when you describe a matching task (e.g. “draft the announcement post for our July
 meetup”), or invoke one explicitly with `/aaif-meetups:<skill>`.
 
+### Quickstart (step‑by‑step)
+
+Prefer the guided UI flow? Run these inside Claude Code:
+
+1. **Add the marketplace:**
+   ```bash
+   /plugin marketplace add https://github.com/aaif/meetups.git#main
+   ```
+2. **Enable it:** run `/plugins`, tab to **Marketplaces**, and enable the **aaif**
+   marketplace.
+3. **Turn on auto‑update** for the marketplace so you always get the latest skills.
+4. **Install the plugin:** in that marketplace, browse plugins and install
+   **aaif‑meetups**.
+5. **Reload:**
+   ```bash
+   /reload-plugins
+   ```
+6. **Start using the skills:** type `/aaif-` in the prompt to see the toolkit's
+   commands autocomplete, then pick one (or just describe your task and the
+   matching skill auto‑activates).
+
+   ![Typing /aaif- shows the toolkit's skills autocompleting in Claude Code](assets/aaif-skills-autocomplete.png)
+
 ---
 
 ## What's inside
