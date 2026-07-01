@@ -41,6 +41,12 @@ Pure writing skills. They take the event details you give them and produce copy.
 | `aaif-attendee-reminder` | Pre‑event reminder to people who RSVP'd |
 | `aaif-recap-post` | Post‑event LinkedIn recap (within 48h) |
 
+> **Attendee legal defaults.** The attendee‑facing skills (`aaif-announcement-post`,
+> `aaif-luma-description`, `aaif-attendee-reminder`) append two standing links by
+> default — the [Code of Conduct](https://events.linuxfoundation.org/about/code-of-conduct/)
+> and [Privacy Policy](https://www.linuxfoundation.org/legal/privacy-policy).
+> Running your own chapter? Swap these URLs in each skill's `SKILL.md`.
+
 ### 🛠️ Ops skills — need Google Workspace access
 These drive Google Drive / Sheets through the `gws` CLI (see below).
 
