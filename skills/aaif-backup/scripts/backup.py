@@ -8,8 +8,10 @@ other file: a Google Drive fileId (native Docs/Sheets/Slides are exported to
 
 Every run writes a NEW immutable file — nothing is ever overwritten:
     <dest>/<slug>/<UTC-timestamp>.<ext>
-so the folder is a full version history you can diff or restore from. <dest> defaults
-to ./backups (kept out of git); restore is manual (re-upload the .xlsx via gws).
+so the folder is a full version history you can diff or restore from (two runs of the
+same target within one second get a `-1`, `-2`, … suffix so neither clobbers the other).
+<dest> defaults to ./backups (kept out of git); restore is manual (re-upload the
+snapshot via gws).
 
 Usage:
     backup.py                       # back up the Intake Ops sheet
@@ -52,11 +54,22 @@ def gws_json(args):
     return json.loads(txt[i:])
 
 
-def gws_download(args):
-    """Run a gws command that writes bytes to --output; fail loudly on error."""
+def gws_download(args, out_path):
+    """Run a gws command that writes bytes to --output; fail loudly on error AND
+    on an empty result. A backup that silently produced a 0-byte file (e.g. Drive's
+    ~10MB export limit, or a dropped connection returning exit 0) is worse than an
+    error, so verify the snapshot is non-empty before we ever report success."""
     out = subprocess.run(["gws"] + args, capture_output=True, text=True)
     if out.returncode != 0:
         sys.exit(f"gws error: {' '.join(args[:4])}...\n{out.stderr.strip()}")
+    if not os.path.isfile(out_path) or os.path.getsize(out_path) == 0:
+        sys.exit(f"ABORT: backup wrote no data to {out_path} — the source may exceed "
+                 f"the export limit or the transfer failed. Snapshot NOT trustworthy.")
+
+
+# A Drive fileId is a run of URL-safe chars with no path separators or dots;
+# used to tell a fileId apart from a (possibly mistyped) local path.
+DRIVE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{20,}$")
 
 
 def slugify(name):
@@ -70,19 +83,30 @@ def timestamp():
 
 
 def snapshot_path(dest_root, slug, ext):
+    """A fresh, non-colliding path. Never returns a path that already exists, so
+    two runs in the same second can't overwrite each other (breaking "immutable")."""
     d = os.path.join(dest_root, slug)
     os.makedirs(d, exist_ok=True)
-    return os.path.join(d, f"{timestamp()}.{ext}")
+    stamp = timestamp()
+    p = os.path.join(d, f"{stamp}.{ext}")
+    n = 1
+    while os.path.exists(p):
+        p = os.path.join(d, f"{stamp}-{n}.{ext}")
+        n += 1
+    return p
 
 
 def backup_local(path, dest_root):
     if not os.path.isfile(path):
-        sys.exit(f"ABORT: local file not found: {path}")
+        what = "is a directory" if os.path.isdir(path) else "not found"
+        sys.exit(f"ABORT: local file {what}: {path}")
     base = os.path.basename(path)
     slug = slugify(os.path.splitext(base)[0])
     ext = base.rsplit(".", 1)[1] if "." in base else "bin"
     out = snapshot_path(dest_root, slug, ext)
     shutil.copy2(path, out)
+    if os.path.getsize(out) == 0:
+        sys.exit(f"ABORT: copied 0 bytes from {path} — snapshot NOT trustworthy.")
     return out
 
 
@@ -91,19 +115,23 @@ def backup_drive(file_id, dest_root):
                      json.dumps({"fileId": file_id, "fields": "name,mimeType"}),
                      "--format", "json"])
     name, mime = meta.get("name", file_id), meta.get("mimeType", "")
+    # A Google-native type we can't export (Forms, Drawings, Sites, Jamboard) is
+    # not fetchable via alt=media either — refuse rather than write a broken .bin.
+    if mime.startswith("application/vnd.google-apps.") and mime not in EXPORT:
+        sys.exit(f"ABORT: {name!r} is a {mime} — no export format; can't back it up here.")
     slug = slugify(name)
     if mime in EXPORT:
         export_mime, ext = EXPORT[mime]
         out = snapshot_path(dest_root, slug, ext)
         gws_download(["drive", "files", "export", "--params",
                       json.dumps({"fileId": file_id, "mimeType": export_mime}),
-                      "--output", out])
+                      "--output", out], out)
     else:
         ext = BINARY_EXT.get(mime, "bin")
         out = snapshot_path(dest_root, slug, ext)
         gws_download(["drive", "files", "get", "--params",
                       json.dumps({"fileId": file_id, "alt": "media"}),
-                      "--output", out])
+                      "--output", out], out)
     return out
 
 
@@ -115,10 +143,18 @@ def main():
                     help="Root folder for snapshots (default: ./backups)")
     a = ap.parse_args()
     dest_root = os.path.abspath(a.dest)
-    if a.target and os.path.exists(a.target):
+    # Dispatch explicitly so a mistyped local path can't silently fall through to
+    # Drive (and die with a cryptic 404): existing path -> local; a clean Drive-id
+    # shape -> Drive; anything else is a mistake, so say so.
+    if a.target is None:
+        out = backup_drive(INTAKE_OPS_ID, dest_root)
+    elif os.path.exists(a.target):
         out = backup_local(a.target, dest_root)
+    elif DRIVE_ID_RE.match(a.target):
+        out = backup_drive(a.target, dest_root)
     else:
-        out = backup_drive(a.target or INTAKE_OPS_ID, dest_root)
+        sys.exit(f"ABORT: {a.target!r} is neither an existing local file nor a "
+                 f"Drive fileId. Check the path, or pass a valid fileId.")
     size = os.path.getsize(out)
     print(f"Backed up -> {out}  ({size:,} bytes)")
 

@@ -14,7 +14,8 @@ Subcommands:
     install-colors  Label City (Existing)/City (New) + (re)install the violet/
                     amber/green provenance rules on the role tabs. Idempotent.
 
-Nothing is written unless you run `apply` or `install-flags`. `scan` only reports.
+Nothing is written unless you run `apply`, `install-flags`, or `install-colors`.
+`scan` only reports.
 """
 import argparse, json, re, subprocess, sys
 
@@ -32,17 +33,6 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 AUTOFIX_COL = "Autofixes"
 AUTOFIX_PHRASE = {"LinkedIn URL": "LinkedIn normalized", "Email": "email normalized",
                   "Full name": "name normalized", "Resolved City": "city resolved"}
-
-# ---------- role-tab provenance colors ----------
-# City (Existing) = col G (submitted dropdown); City (New) = col H (resolved
-# "Other" city). Fixed positions: the role-tab array formula emits
-# ...,City,Resolved City,... as adjacent columns, landing at G then H.
-CITY_EXISTING_COL, CITY_NEW_COL = 7, 8            # 1-based (G, H)
-VIOLET = {"red": 0.60, "green": 0.20, "blue": 0.90}   # Status = Existing (from MLOps)
-AMBER  = {"red": 0.99, "green": 0.76, "blue": 0.30}   # net-new resolved city
-GREEN  = {"red": 0.72, "green": 0.88, "blue": 0.70}   # existing form city
-COLOR_FORMULAS = {'=$A2="Existing (from MLOps)"', '=$H2<>""',
-                  '=AND($G2<>"",$G2<>"Other")'}
 
 
 # ---------- gws helpers ----------
@@ -73,6 +63,57 @@ def colletter(n):  # 1-based -> A1 letter
         n, r = divmod(n - 1, 26)
         s = chr(65 + r) + s
     return s
+
+
+# ---------- role-tab provenance colors ----------
+# City (Existing) = col G (submitted dropdown); City (New) = col H (resolved
+# "Other" city). These two are addressed by fixed LETTER position — an explicit
+# exception to this module's usual header-name rule — because they are the
+# adjacent City,Resolved City pair the role-tab array formula always emits at
+# G then H. install_colors() guards that G/H really hold that pair before writing.
+CITY_EXISTING_COL, CITY_NEW_COL = 7, 8            # 1-based (G, H)
+VIOLET = {"red": 0.60, "green": 0.20, "blue": 0.90}   # Status = Existing (from MLOps)
+AMBER  = {"red": 0.99, "green": 0.76, "blue": 0.30}   # net-new resolved city
+GREEN  = {"red": 0.72, "green": 0.88, "blue": 0.70}   # existing form city
+# Build the three rule formulas ONCE from the column constants, so the set used
+# to detect our own rules (for idempotent refresh) can never drift from the set
+# used to install them.
+VIOLET_FORMULA = '=$A2="Existing (from MLOps)"'
+AMBER_FORMULA = f'=${colletter(CITY_NEW_COL)}2<>""'
+GREEN_FORMULA = (f'=AND(${colletter(CITY_EXISTING_COL)}2<>"",'
+                 f'${colletter(CITY_EXISTING_COL)}2<>"Other")')
+COLOR_FORMULAS = {VIOLET_FORMULA, AMBER_FORMULA, GREEN_FORMULA}
+# The two source-column headers we expect at G/H before (or after) labeling.
+CITY_SRC_HEADERS = ({"City", "City (Existing)"}, {"Resolved City", "City (New)"})
+
+
+def _rgb8(c):
+    """Quantize a color dict to 8-bit ints — Sheets round-trips colors at 8-bit,
+    so compare with this, never with exact float equality."""
+    return tuple(round(c.get(k, 0) * 255) for k in ("red", "green", "blue"))
+
+
+def formula_of(cf):
+    """The CUSTOM_FORMULA text of a conditional-format rule, or None."""
+    c = cf.get("booleanRule", {}).get("condition", {})
+    vals = c.get("values", [])
+    return vals[0].get("userEnteredValue") if c.get("type") == "CUSTOM_FORMULA" and vals else None
+
+
+def _is_red(cf):
+    """True if this rule is the bright-red error rule (matched by 8-bit color)."""
+    bg = cf.get("booleanRule", {}).get("format", {}).get("backgroundColor")
+    return bool(bg) and _rgb8(bg) == _rgb8(BRIGHT_RED)
+
+
+def color_rule_plan(cfs):
+    """Pure planner for install_colors: given a tab's conditionalFormats, return
+    (stale_indices_desc, base_index). stale = our own color rules to delete
+    (matched by formula); base = insert index just BELOW the bright-red error
+    rule so it keeps top priority. Testable without touching Sheets."""
+    stale = [i for i, cf in enumerate(cfs) if formula_of(cf) in COLOR_FORMULAS]
+    base = 1 if any(_is_red(cf) for cf in cfs) else 0
+    return sorted(stale, reverse=True), base
 
 
 # ---------- normalizers ----------
@@ -298,26 +339,52 @@ def install_flags():
 
 
 # ---------- install City (Existing)/City (New) labels + provenance colors ----------
-def _conditional_formats(sid):
-    """Return the conditionalFormats list for one role tab (by sheetId)."""
+def _all_conditional_formats():
+    """One spreadsheet fetch -> {sheetId: conditionalFormats}. Fetched once and
+    indexed, rather than re-fetching the whole spreadsheet per role tab."""
     d = gws(["sheets", "spreadsheets", "get", "--params",
              json.dumps({"spreadsheetId": SHEET_ID}), "--format", "json"])
-    for sh in d.get("sheets", []):
-        if sh["properties"]["sheetId"] == sid:
-            return sh.get("conditionalFormats", [])
-    return []
+    return {sh["properties"]["sheetId"]: sh.get("conditionalFormats", [])
+            for sh in d.get("sheets", [])}
+
+
+def _color_rule(sid, index, c0, c1, formula, bg, white=False):
+    """One addConditionalFormatRule request over 0-based half-open columns."""
+    fmt = {"backgroundColor": bg}
+    if white:
+        fmt["textFormat"] = {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True}
+    return {"addConditionalFormatRule": {"index": index, "rule": {
+        "ranges": [{"sheetId": sid, "startRowIndex": 1, "endRowIndex": 1000,
+                    "startColumnIndex": c0, "endColumnIndex": c1}],
+        "booleanRule": {"condition": {"type": "CUSTOM_FORMULA",
+                        "values": [{"userEnteredValue": formula}]}, "format": fmt}}}}
 
 
 def install_colors():
     """Label the two city columns and (re)install violet/amber/green rules.
 
-    Idempotent: deletes the rules it owns (matched by formula) and re-adds them
-    just under the bright-red error rule, so error keeps top priority and the
-    city colors override the whole-row Status colors on their own columns.
+    Idempotent: deletes the rules it owns (matched by formula, via
+    `color_rule_plan`) and re-adds them just below the bright-red error rule so
+    the error keeps top priority. The violet whole-row rule sits above amber/
+    green, so on an "Existing (from MLOps)" row the whole row (city cells
+    included) reads violet — the Status color wins over the city colors where
+    they overlap.
     """
+    all_cfs = _all_conditional_formats()
     for tab, sid in ROLE_TABS.items():
         hdr, _ = read_tab(tab, "A1:BB")
         lastcol = len(hdr)
+        # Guard the fixed G/H positions before overwriting those header cells:
+        # bail loudly if a column move has shifted the City / Resolved City pair
+        # (accepts both the pre-label and already-labeled header text).
+        gcur = hdr[CITY_EXISTING_COL - 1] if len(hdr) >= CITY_EXISTING_COL else ""
+        hcur = hdr[CITY_NEW_COL - 1] if len(hdr) >= CITY_NEW_COL else ""
+        if gcur not in CITY_SRC_HEADERS[0] or hcur not in CITY_SRC_HEADERS[1]:
+            sys.exit(f"ABORT: {tab} G/H are {gcur!r}/{hcur!r}, not the expected "
+                     f"City / Resolved City pair — columns moved? Fix before recoloring.")
+        cfs = all_cfs.get(sid)
+        if cfs is None:
+            sys.exit(f"ABORT: sheetId {sid} ({tab}) not found in the spreadsheet.")
         gws(["sheets", "spreadsheets", "values", "batchUpdate", "--params",
              json.dumps({"spreadsheetId": SHEET_ID}), "--json",
              json.dumps({"valueInputOption": "USER_ENTERED", "data": [
@@ -325,30 +392,14 @@ def install_colors():
                   "values": [["City (Existing)"]]},
                  {"range": f"{tab}!{colletter(CITY_NEW_COL)}1",
                   "values": [["City (New)"]]}]}), "--format", "json"])
-        cfs = _conditional_formats(sid)
-        def formula_of(cf):
-            c = cf.get("booleanRule", {}).get("condition", {})
-            vals = c.get("values", [])
-            return vals[0].get("userEnteredValue") if c.get("type") == "CUSTOM_FORMULA" and vals else None
-        stale = [i for i, cf in enumerate(cfs) if formula_of(cf) in COLOR_FORMULAS]
+        stale, base = color_rule_plan(cfs)
         dels = [{"deleteConditionalFormatRule": {"sheetId": sid, "index": i}}
-                for i in sorted(stale, reverse=True)]
-        base = 1 if any(cf.get("booleanRule", {}).get("format", {})
-                        .get("backgroundColor") == BRIGHT_RED for cf in cfs) else 0
-        def rule(index, c0, c1, formula, bg, white=False):
-            fmt = {"backgroundColor": bg}
-            if white:
-                fmt["textFormat"] = {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True}
-            return {"addConditionalFormatRule": {"index": index, "rule": {
-                "ranges": [{"sheetId": sid, "startRowIndex": 1, "endRowIndex": 1000,
-                            "startColumnIndex": c0, "endColumnIndex": c1}],
-                "booleanRule": {"condition": {"type": "CUSTOM_FORMULA",
-                                "values": [{"userEnteredValue": formula}]}, "format": fmt}}}}
+                for i in stale]
         adds = [
-            rule(base + 0, 0, lastcol, '=$A2="Existing (from MLOps)"', VIOLET, white=True),
-            rule(base + 1, CITY_NEW_COL - 1, CITY_NEW_COL, '=$H2<>""', AMBER),
-            rule(base + 2, CITY_EXISTING_COL - 1, CITY_EXISTING_COL,
-                 '=AND($G2<>"",$G2<>"Other")', GREEN),
+            _color_rule(sid, base + 0, 0, lastcol, VIOLET_FORMULA, VIOLET, white=True),
+            _color_rule(sid, base + 1, CITY_NEW_COL - 1, CITY_NEW_COL, AMBER_FORMULA, AMBER),
+            _color_rule(sid, base + 2, CITY_EXISTING_COL - 1, CITY_EXISTING_COL,
+                        GREEN_FORMULA, GREEN),
         ]
         gws(["sheets", "spreadsheets", "batchUpdate", "--params",
              json.dumps({"spreadsheetId": SHEET_ID}), "--json",
