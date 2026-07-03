@@ -17,7 +17,7 @@ Prereq: the `gws` CLI must be installed and authenticated (`gws-cli-access` memo
 See `aaif-intake-ops-sheet` memory for the sheet's structure. All reads/writes go
 by **header name**, never column letter.
 
-## The three modes (engine: `scripts/clean.py`)
+## The modes (engine: `scripts/clean.py`)
 
 1. **Scan (default, read-only)** — detect & propose:
    ```bash
@@ -50,6 +50,19 @@ by **header name**, never column letter.
    surfaced by `scan`), so it never turns a row red. Already installed — re-run only
    to refresh after a column move.
 
+4. **Install-colors (maintenance)** — label the two city columns and provenance-color
+   the role tabs:
+   ```bash
+   python3 ${CLAUDE_SKILL_DIR}/scripts/clean.py install-colors
+   ```
+   Labels col G **`City (Existing)`** / col H **`City (New)`** and installs three
+   rules just **under** the bright-red error rule (so errors keep top priority):
+   **violet** whole-row when `Status = "Existing (from MLOps)"`, **amber** on
+   `City (New)` when it has a value (a net-new resolved city), and **green** on
+   `City (Existing)` when it holds a real city (non-empty, not "Other"). Idempotent —
+   it matches and refreshes its own rules by formula, safe to re-run after a column
+   move. `install-flags` now also runs this, so one command does the full setup.
+
 ## Procedure
 
 1. **Scan** and show the user the proposed mechanical fixes and the flags, grouped
@@ -58,10 +71,12 @@ by **header name**, never column letter.
    `City="Other"` row, read that person's free-text in `Form Responses` (their
    "Why organize / ties", "Have you helped run events before?", LinkedIn, etc.) and
    infer the real city — e.g. Bangalore, Frankfurt, Luxembourg. Write the inferred
-   value into the **`Resolved City`** column (a dedicated source column at `CE`),
-   **never overwrite the submitted `City` dropdown** — that's the non-destructive
-   rule. The role tabs show `Resolved City` right after `City`, and a row stops
-   being flagged once `Resolved City` is filled. Don't guess with no signal.
+   value into the **`Resolved City`** source column (now at `CF`; shown in the role
+   tabs as **`City (New)`**), **never overwrite the submitted `City` dropdown**
+   (shown as **`City (Existing)`**) — that's the non-destructive rule. `City (New)`
+   holds **only net-new cities** (rows where `City = "Other"`); existing form cities
+   stay in `City (Existing)` and must **not** be copied across. A row stops being
+   flagged once `Resolved City` is filled. Don't guess with no signal.
 3. **Confirm with the user** which fixes to apply. Mechanical fixes are safe to
    batch; city resolutions should be eyeballed since they're inferred.
 4. **Build `changes.json`** (rows + header names + new values) and run `apply`.

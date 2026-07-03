@@ -18,14 +18,45 @@ sheet's structure.
 
 ## Status model (drives the queue and the sheet's cell colors)
 
-The five Status values (dropdown on column A, matched exactly by the sheet's
-whole-row colors): `New` (blue) → `In progress` (orange) → `Accepted` (green) /
-`Denied` (maroon); `Inactive` (gray). A **blank** Status cell is treated as `New`.
-Two overrides beat the status color: a **data error** (missing/invalid email or
-broken LinkedIn) paints the row bright red, and an **SLA breach** — a `New`/blank
+The Status values (dropdown on column A, matched exactly by the sheet's
+whole-row colors): `New` (blue) → `In progress` (orange) → `Tentative` (teal) →
+`Accepted` (green) / `Denied` (maroon); `Inactive` (gray); and `Existing (from MLOps)`
+(**violet**) for a prior organizer imported from the MLOps community. `Tentative` is a
+real dropdown value: it marks a candidate who has passed LinkedIn vetting but isn't yet
+accepted (pending the interview / chapter-champs intro in the review flow below). A
+**blank** Status cell is treated as `New`. Two overrides beat the status color: a **data error** (missing/invalid email
+or broken LinkedIn) paints the row bright red, and an **SLA breach** — a `New`/blank
 row older than 1 week (of a 2-week response SLA) — paints it pink. Acting on a row
 (moving it off `New`) clears the pink. Each role tab also has `Reviewed by`,
 `Reviewed at`, `Decision notes`, and a `Chapter` assignment.
+
+**City provenance colors** (on the two city columns, below the error rule; installed by
+`aaif-clean-data install-colors`): the role tabs show **`City (Existing)`** (col G, the
+submitted dropdown) and **`City (New)`** (col H, the resolved city for `Other` rows).
+`City (New)` is painted **amber** when it holds a net-new resolved city; `City
+(Existing)` is painted **green** when it holds a real submitted city (non-empty, not
+"Other"). These tell you at a glance whether an applicant is from an existing chapter
+city or a brand-new one.
+
+## Organizer review flow
+
+Every credible applicant goes to **Tentative** first — no one is accepted directly.
+MLOps veterans convert straight through; everyone else is accepted only **after an
+interview** (existing-city candidates also get an intro to the chapter champs):
+
+```
+Form submission ─→ New
+   └ Review LinkedIn: credible organizer?  ── no ─→ Denied
+        │ yes
+        ▼  Tentative (vetted, not yet accepted)
+        ├ Prior organizer, existing chapter (MLOps) → violet → Accepted (existing MLOps)
+        ├ Existing city, net-new → green City (Existing) → intro chapter champs → interview → Accepted (after interview)
+        └ New city / new chapter → amber City (New) → interview → Accepted (after interview)
+   On final Accept (either) ─→ grant: local chapter Drive folder + local-champs
+        channel + guidelines (confirm they've read & understood them)
+```
+
+The same flow (and colors) is documented on the sheet's **"How to use"** tab.
 
 ## Procedure
 

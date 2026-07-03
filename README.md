@@ -81,6 +81,7 @@ These drive Google Drive / Sheets through the `gws` CLI (see below).
 | `aaif-create-online-series` | Clone the **TemplateSeries** folder under **Online/** and rebrand it for a new online series | Google Drive |
 | `aaif-triage-intake` | Summarize who's awaiting review in the Community Intake sheet + draft outreach | Google Sheets |
 | `aaif-clean-data` | Normalize/flag data quality in the Intake sheet (LinkedIn, casing, City=Other…) | Google Sheets |
+| `aaif-backup` | Versioned local snapshots of critical data (Intake sheet by default, or any file) before risky edits | Google Drive |
 
 > **Heads up — these ship with AAIF's own IDs.** The ops skills reference AAIF's
 > Google resources (the Chapters Drive, the Intake Ops spreadsheet ID, Luma slug

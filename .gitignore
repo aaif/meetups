@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .ruff_cache/
+
+# Local versioned backups from the aaif-backup skill (binary snapshots stay out of git)
+backups/*
+!backups/README.md

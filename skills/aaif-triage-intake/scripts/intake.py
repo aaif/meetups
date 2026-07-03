@@ -16,20 +16,26 @@ import argparse, json, subprocess, sys
 SHEET_ID = "1cWkjCI5AGK9RX_fs23P5jRA4I2nixgnHuapvwHseZ5o"
 
 # Per-tab: the header names to surface in the digest (resolved by name).
-# Name / Email / LinkedIn / City are shown for every tab; these add the
-# distinctive, decision-relevant fields per applicant type.
+# Name / Email / LinkedIn / City (Existing) / City (New) are shown for every tab;
+# these add the distinctive, decision-relevant fields per applicant type.
 TABS = {
-    "Organizers": ["Full name", "Email", "LinkedIn", "City",
+    "Organizers": ["Full name", "Email", "LinkedIn", "City (Existing)", "City (New)",
                    "Chapter / city wanted", "Technical expertise",
                    "Run events before?", "Why organize / ties"],
-    "Hosts":      ["Name", "Email", "LinkedIn", "City", "Company",
+    "Hosts":      ["Name", "Email", "LinkedIn", "City (Existing)", "City (New)", "Company",
                    "Venue name", "Capacity", "Holds 30+?", "A/V available?"],
-    "Speakers":   ["Name", "Email", "LinkedIn", "City", "Headline",
+    "Speakers":   ["Name", "Email", "LinkedIn", "City (Existing)", "City (New)", "Headline",
                    "Talk title", "Ships in production?", "Past talks / portfolio"],
 }
 
 # Rows in these Status states (or blank) are "awaiting review".
 DEFAULT_NEEDS_REVIEW = {"", "New", "In progress"}
+
+# The City columns were renamed to City (Existing)/City (New). They only carry
+# those headers after `aaif-clean-data install-colors` has run; until then the
+# role tabs still show the legacy City/Resolved City. Fall back so the digest
+# degrades to the old value instead of silently blanking every applicant's city.
+LEGACY_ALIASES = {"City (Existing)": "City", "City (New)": "Resolved City"}
 
 
 def fetch(tab):
@@ -88,6 +94,8 @@ def collect(status_filter, show_all):
             rec = {"row": rn, "status": status or "New"}
             for f in fields:
                 ci = col(headers, f)
+                if ci is None and f in LEGACY_ALIASES:
+                    ci = col(headers, LEGACY_ALIASES[f])
                 rec[f] = (row[ci].strip() if ci is not None else "")
             picked.append(rec)
         result[tab] = picked
@@ -110,9 +118,10 @@ def text_digest(data):
         for r in recs:
             name = r.get("Full name") or r.get("Name") or "(no name)"
             print(f"  • [{r['status']}] {name} — {r.get('Email','')}"
-                  f"  {r.get('City','')}  (row {r['row']})")
+                  f"  {(r.get('City (New)') or r.get('City (Existing)', ''))}  (row {r['row']})")
             for f, v in r.items():
-                if f in ("row", "status", "Full name", "Name", "Email", "City"):
+                if f in ("row", "status", "Full name", "Name", "Email",
+                         "City (Existing)", "City (New)"):
                     continue
                 if v:
                     print(f"      {f}: {truncate(v)}")
