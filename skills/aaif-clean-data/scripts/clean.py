@@ -11,6 +11,8 @@ Subcommands:
                     "Autofixes" column (created if missing).
     install-flags   Add/refresh the live "Issues" column + bright-red row rule on the
                     role tabs (Organizers/Hosts/Speakers).
+    install-colors  Label City (Existing)/City (New) + (re)install the violet/
+                    amber/green provenance rules on the role tabs. Idempotent.
 
 Nothing is written unless you run `apply` or `install-flags`. `scan` only reports.
 """
@@ -30,6 +32,17 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 AUTOFIX_COL = "Autofixes"
 AUTOFIX_PHRASE = {"LinkedIn URL": "LinkedIn normalized", "Email": "email normalized",
                   "Full name": "name normalized", "Resolved City": "city resolved"}
+
+# ---------- role-tab provenance colors ----------
+# City (Existing) = col G (submitted dropdown); City (New) = col H (resolved
+# "Other" city). Fixed positions: the role-tab array formula emits
+# ...,City,Resolved City,... as adjacent columns, landing at G then H.
+CITY_EXISTING_COL, CITY_NEW_COL = 7, 8            # 1-based (G, H)
+VIOLET = {"red": 0.60, "green": 0.20, "blue": 0.90}   # Status = Existing (from MLOps)
+AMBER  = {"red": 0.99, "green": 0.76, "blue": 0.30}   # net-new resolved city
+GREEN  = {"red": 0.72, "green": 0.88, "blue": 0.70}   # existing form city
+COLOR_FORMULAS = {'=$A2="Existing (from MLOps)"', '=$H2<>""',
+                  '=AND($G2<>"",$G2<>"Other")'}
 
 
 # ---------- gws helpers ----------
@@ -162,7 +175,7 @@ def scan():
             flags.append({"row": rn, "who": who, "issue": f"LinkedIn not a profile URL: {row[li].strip()}"})
         resolved = (row[ri].strip() if ri is not None and ri < len(row) else "")
         if city.lower() == "other" and not resolved:
-            flags.append({"row": rn, "who": who, "issue": "city=Other (resolve into 'Resolved City' from their text)"})
+            flags.append({"row": rn, "who": who, "issue": "city=Other (resolve into 'City (New)' from their text)"})
         if email:
             seen_email.setdefault(email, []).append(rn)
     for email, rns in seen_email.items():
@@ -281,6 +294,67 @@ def install_flags():
                  json.dumps({"requests": [req, hdrfmt]}), "--format", "json"])
         print(f"{tab}: Issues column at {ilet}, bright-red rule "
               f"{'kept' if 'Issues' in hdr else 'added'}.")
+    install_colors()
+
+
+# ---------- install City (Existing)/City (New) labels + provenance colors ----------
+def _conditional_formats(sid):
+    """Return the conditionalFormats list for one role tab (by sheetId)."""
+    d = gws(["sheets", "spreadsheets", "get", "--params",
+             json.dumps({"spreadsheetId": SHEET_ID}), "--format", "json"])
+    for sh in d.get("sheets", []):
+        if sh["properties"]["sheetId"] == sid:
+            return sh.get("conditionalFormats", [])
+    return []
+
+
+def install_colors():
+    """Label the two city columns and (re)install violet/amber/green rules.
+
+    Idempotent: deletes the rules it owns (matched by formula) and re-adds them
+    just under the bright-red error rule, so error keeps top priority and the
+    city colors override the whole-row Status colors on their own columns.
+    """
+    for tab, sid in ROLE_TABS.items():
+        hdr, _ = read_tab(tab, "A1:BB")
+        lastcol = len(hdr)
+        gws(["sheets", "spreadsheets", "values", "batchUpdate", "--params",
+             json.dumps({"spreadsheetId": SHEET_ID}), "--json",
+             json.dumps({"valueInputOption": "USER_ENTERED", "data": [
+                 {"range": f"{tab}!{colletter(CITY_EXISTING_COL)}1",
+                  "values": [["City (Existing)"]]},
+                 {"range": f"{tab}!{colletter(CITY_NEW_COL)}1",
+                  "values": [["City (New)"]]}]}), "--format", "json"])
+        cfs = _conditional_formats(sid)
+        def formula_of(cf):
+            c = cf.get("booleanRule", {}).get("condition", {})
+            vals = c.get("values", [])
+            return vals[0].get("userEnteredValue") if c.get("type") == "CUSTOM_FORMULA" and vals else None
+        stale = [i for i, cf in enumerate(cfs) if formula_of(cf) in COLOR_FORMULAS]
+        dels = [{"deleteConditionalFormatRule": {"sheetId": sid, "index": i}}
+                for i in sorted(stale, reverse=True)]
+        base = 1 if any(cf.get("booleanRule", {}).get("format", {})
+                        .get("backgroundColor") == BRIGHT_RED for cf in cfs) else 0
+        def rule(index, c0, c1, formula, bg, white=False):
+            fmt = {"backgroundColor": bg}
+            if white:
+                fmt["textFormat"] = {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True}
+            return {"addConditionalFormatRule": {"index": index, "rule": {
+                "ranges": [{"sheetId": sid, "startRowIndex": 1, "endRowIndex": 1000,
+                            "startColumnIndex": c0, "endColumnIndex": c1}],
+                "booleanRule": {"condition": {"type": "CUSTOM_FORMULA",
+                                "values": [{"userEnteredValue": formula}]}, "format": fmt}}}}
+        adds = [
+            rule(base + 0, 0, lastcol, '=$A2="Existing (from MLOps)"', VIOLET, white=True),
+            rule(base + 1, CITY_NEW_COL - 1, CITY_NEW_COL, '=$H2<>""', AMBER),
+            rule(base + 2, CITY_EXISTING_COL - 1, CITY_EXISTING_COL,
+                 '=AND($G2<>"",$G2<>"Other")', GREEN),
+        ]
+        gws(["sheets", "spreadsheets", "batchUpdate", "--params",
+             json.dumps({"spreadsheetId": SHEET_ID}), "--json",
+             json.dumps({"requests": dels + adds}), "--format", "json"])
+        print(f"{tab}: labeled City (Existing)/City (New); "
+              f"{len(stale)} old rule(s) refreshed, 3 installed.")
 
 
 def main():
@@ -289,6 +363,7 @@ def main():
     sp = sub.add_parser("scan"); sp.add_argument("--json", action="store_true")
     ap_apply = sub.add_parser("apply"); ap_apply.add_argument("file")
     sub.add_parser("install-flags")
+    sub.add_parser("install-colors")
     a = ap.parse_args()
     if a.cmd == "scan":
         changes, flags = scan()
@@ -300,6 +375,8 @@ def main():
         apply(a.file)
     elif a.cmd == "install-flags":
         install_flags()
+    elif a.cmd == "install-colors":
+        install_colors()
 
 
 if __name__ == "__main__":
