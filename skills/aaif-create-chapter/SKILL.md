@@ -30,6 +30,15 @@ not touch it.
 | `SF` abbreviation (`AAIF · SF`, `SF CHAPTER`, `About the AAIF SF Chapter`, `AAIF SF — Attendee CRM`, doc metadata) | full city name | **UPPER** in all-caps contexts, **Title case** in prose |
 | `aaif-sanfrancisco` / `AAIF-SANFRANCISCO` (Luma slug, incl. hyperlink targets) | `aaif-<slug>` / `AAIF-<SLUG>` | see slug rules below |
 
+Beyond text, the script also **repositions the green "you-are-here" dot and its
+`<CITY> · TONIGHT` label** on slide 5 ("THE NETWORK") of `Event Template/Slides.pptx`
+to the new city's real place on the world map. Previously only the label text was
+rebranded and the dot stayed parked at San Francisco — this closes that gap. The
+city's coordinates come from `--lat`/`--lon` if given, otherwise from geocoding the
+city name (Nominatim, keyless). If neither resolves (offline, or a fictional name),
+the dot is left at San Francisco with a clear warning — chapter creation never
+fails over the dot. See **Map dot coordinates** below.
+
 ## Luma slug rules
 
 - Default slug = city lowercased, spaces/accents removed: `New York → newyork`,
@@ -41,6 +50,24 @@ not touch it.
   `LU.MA / AAIF-<SLUG>`; keep that — only the slug changes.
 - The script **cannot create the Luma page** (that's done manually at luma.com).
   It checks whether the page is live and warns if not.
+
+## Map dot coordinates
+
+The slide-5 network-map dot is placed from the city's latitude/longitude:
+
+- **Default:** the script geocodes the `--city` name via Nominatim (keyless, no
+  key/setup). The dry run prints the resolved `Coords:` line so you can sanity-check
+  it before creating anything.
+- **Override:** pass `--lat <deg> --lon <deg>` (both required together) to skip
+  geocoding — useful when a city name is ambiguous or geocodes to the wrong place.
+- **Fallback:** if geocoding returns nothing or the service is unreachable and no
+  override was given, the dot is left at San Francisco and a warning is printed. The
+  chapter is still created; just fix slide 5's dot manually (or re-run with `--lat`/`--lon`).
+
+The projection is calibrated to the **current** `image18.png` world map. East-Asia /
+Oceania cities are drawn distorted and use a per-city `PIXEL_OVERRIDES` table in the
+script (seeded with Seoul, Sydney, Melbourne). If a new such city lands off, add an
+override (see Verify) and re-run.
 
 ## Procedure
 
@@ -69,6 +96,15 @@ not touch it.
 
 4. **Verify.** Confirm the run printed no `!! residual` flags and report the new
    folder URL to the user. If the Luma page wasn't live, remind them to create it.
+   Open slide 5 ("THE NETWORK") of `Event Template/Slides.pptx` and confirm the
+   green dot sits on the correct city (the `Slides.pptx` line shows `+map dot` when
+   it was moved). If the city is in **East Asia / Oceania** and the dot looks off,
+   add a `PIXEL_OVERRIDES` entry in `create_chapter.py` (pixel coords on the
+   1123×794 `image18.png`) and re-run. To recalibrate against a render:
+   ```bash
+   # macOS: /Applications/LibreOffice.app/Contents/MacOS/soffice
+   soffice --headless --convert-to pdf --outdir . Slides.pptx   # check page 5
+   ```
 
 ## How it works / maintenance
 
@@ -78,12 +114,23 @@ robust to OOXML run-splitting. The `SF`-abbreviation casing is decided by the
 surrounding words. The Drive layer uses `gws` (`files.copy`, `create`, `get`,
 `update`).
 
+The slide-5 map dot is placed by `reposition_map_marker` using a lat/lon →
+pixel projection (`lon2x` linear; `lat2y` piecewise-linear via `LAT_ANCHORS`;
+`PIXEL_OVERRIDES` for the distorted western Pacific). The anchors are calibrated
+to the current `image18.png`; **if the template's map image changes, recalibrate**
+by rendering slide 5 to PDF (see Verify) and adjusting `LAT_ANCHORS` / `lon2x` /
+overrides until candidate dots sit on the coastlines. `scripts/test_create_chapter.py`
+covers the San Francisco self-check, the label offset, the override table, and the
+2-shapes-or-raise guard.
+
 To validate the engine after any edit, rebrand a throwaway copy of the template
 and diff it against an existing chapter (the canonical end-state):
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/create_chapter.py \
-    --city "Los Angeles" --rebrand-local /path/to/template-copy
-# then compare paragraph text against the real Los Angeles chapter
+    --city "Los Angeles" --lat 34.05 --lon -118.24 --rebrand-local /path/to/template-copy
+# then compare paragraph text against the real Los Angeles chapter, and open
+# slide 5 of the rebranded Slides.pptx to confirm the dot moved (+map dot).
+python3 ${CLAUDE_SKILL_DIR}/scripts/test_create_chapter.py   # unit tests
 ```
 
 Constants (Chapters parent id, TemplateCity id) live at the top of the script.

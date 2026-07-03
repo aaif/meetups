@@ -24,7 +24,7 @@ Usage:
   # Test the text engine on a local folder of .pptx/.docx/.xlsx (no Drive):
   python create_chapter.py --city "Los Angeles" --rebrand-local ./somedir
 """
-import argparse, html, json, os, re, subprocess, sys, time, unicodedata, urllib.error, urllib.request, zipfile
+import argparse, html, json, os, re, subprocess, sys, time, unicodedata, urllib.error, urllib.parse, urllib.request, zipfile
 
 CHAPTERS_PARENT = "1IQ1K7aVOKUUkxAcfLuNjdETEnmavvtjx"   # the "Chapters" Drive folder
 TEMPLATE_FOLDER = "1PHvEgqnHo0RrsFyA47O9iRJGaKehC8Eg"   # the "TemplateCity" folder
@@ -159,6 +159,157 @@ def residual_tokens(path):
     return hits
 
 # ----------------------------------------------------------------------------
+# Network-map marker placement (slide 5 "THE NETWORK" of Event Template/Slides.pptx)
+#
+# The template's world map (ppt/media/image18.png, 1123x794 px) carries a green
+# "you-are-here" dot + a "<CITY> · TONIGHT" label, both parked at San Francisco.
+# rebrand_file fixes the label *text*; this moves the green shapes to the new city.
+# The projection anchors/overrides below are calibrated to the *current* image18.png
+# — if the template's map image changes, recalibrate (see SKILL.md "Verify").
+# ----------------------------------------------------------------------------
+SLIDE5 = "ppt/slides/slide5.xml"
+GREEN = "14964A"                       # AAIF green fill on both marker shapes
+DOT_SIZE = 155448                      # dot ext cx=cy, EMU
+MAP_OFF = (3246120, 1234440)           # world-map picture off, EMU
+MAP_EXT = (5394960, 3814424)           # world-map picture ext, EMU
+MAP_PX = (1123, 794)                   # world-map picture size, px
+LABEL_DX, LABEL_DY = -425196, 224028   # label-corner minus dot-corner (SF template)
+# The dot is the small square green shape; the label is the wide text box. The dot
+# carries an EMPTY <a:t></a:t>, so text presence can't tell them apart — discriminate
+# by the dot's 155448x155448 ext (its signature).
+DOT_EXT_RE = re.compile(r'<a:ext cx="%d" cy="%d"\s*/>' % (DOT_SIZE, DOT_SIZE))
+
+# Longitude: linear (verified on SF, London, Gibraltar, Tokyo).
+def lon2x(lon):
+    return 2.676 * lon + 516.3
+
+# Latitude: NONLINEAR (the map compresses toward the poles) — piecewise-linear.
+LAT_ANCHORS = [(64.8, 205), (51.5, 253), (37.77, 311), (25.1, 345),
+               (0.0, 398), (-34.8, 525), (-55.9, 597)]
+
+def lat2y(lat):
+    a = LAT_ANCHORS
+    if lat >= a[0][0]:
+        (l0, y0), (l1, y1) = a[0], a[1]
+    elif lat <= a[-1][0]:
+        (l0, y0), (l1, y1) = a[-2], a[-1]
+    else:
+        for i in range(len(a) - 1):
+            if a[i][0] >= lat >= a[i + 1][0]:
+                (l0, y0), (l1, y1) = a[i], a[i + 1]
+                break
+    return y0 + (lat - l0) / (l1 - l0) * (y1 - y0)
+
+# The western Pacific is drawn distorted (Tokyo ~140°E and Sydney ~151°E land at
+# nearly the same x), so a separable projection can't place East-Asia/Oceania by
+# formula. Keep a per-city pixel override table, seeded with the known cases.
+PIXEL_OVERRIDES = {"Seoul": (822, 305), "Sydney": (870, 512), "Melbourne": (836, 543)}
+
+def project_city(name, lat, lon):
+    """Map a city to (x, y) pixels on image18.png (override table first)."""
+    if name in PIXEL_OVERRIDES:
+        return PIXEL_OVERRIDES[name]
+    return lon2x(lon), lat2y(lat)
+
+def marker_offsets(name, lat, lon):
+    """Return (dot_off, label_off) in EMU for a city, matching the SF template's
+    relative label placement. Self-check: San Francisco (37.77, -122.42)
+    reproduces the real template/chapter dot off (4074942, 2650779)."""
+    px, py = project_city(name, lat, lon)
+    cx = MAP_OFF[0] + px * (MAP_EXT[0] / MAP_PX[0])   # dot CENTER, EMU
+    cy = MAP_OFF[1] + py * (MAP_EXT[1] / MAP_PX[1])
+    dot_off = (round(cx - DOT_SIZE / 2), round(cy - DOT_SIZE / 2))
+    label_off = (dot_off[0] + LABEL_DX, dot_off[1] + LABEL_DY)
+    return dot_off, label_off
+
+def reposition_map_marker(path, city, lat, lon):
+    """Move the green dot + its label on slide 5 of a .pptx to (lat, lon).
+
+    Returns the number of shapes moved (2 on success) or 0 when there is nothing
+    to move (slide 5 absent, or it has no green marker shapes). Raises if green
+    shapes are present but not exactly 2 can be moved — a template drift the
+    caller should surface loudly, mirroring the residual-token check."""
+    with zipfile.ZipFile(path) as z:
+        if SLIDE5 not in z.namelist():
+            print("      note: %s has no %s; leaving map dot as-is."
+                  % (os.path.basename(path), SLIDE5))
+            return 0
+        xml = z.read(SLIDE5).decode("utf-8")
+
+    dot_off, label_off = marker_offsets(city, lat, lon)
+    off_re = re.compile(r'<a:off x="-?\d+" y="-?\d+"/>')
+    sp_re = re.compile(r"<p:sp\b[^>]*>.*?</p:sp>", re.S)   # slide 5 shapes are flat
+
+    green = moved = 0
+    def move_sp(m):
+        nonlocal green, moved
+        block = m.group(0)
+        if GREEN not in block:
+            return block
+        green += 1
+        off = dot_off if DOT_EXT_RE.search(block) else label_off
+        block, n = off_re.subn('<a:off x="%d" y="%d"/>' % off, block, count=1)
+        moved += n
+        return block
+
+    new_xml = sp_re.sub(move_sp, xml)
+    if green == 0:
+        print("      note: slide 5 has no green (%s) marker shapes; "
+              "leaving map dot as-is." % GREEN)
+        return 0
+    if moved != 2:
+        raise RuntimeError(
+            "slide 5: expected to move exactly 2 green marker shapes, moved %d "
+            "of %d green shape(s) — template drift? Re-check reposition_map_marker."
+            % (moved, green))
+
+    tmp = path + ".new"
+    with zipfile.ZipFile(path) as zin, \
+            zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+        for it in zin.infolist():
+            data = new_xml.encode("utf-8") if it.filename == SLIDE5 else zin.read(it.filename)
+            zi = zipfile.ZipInfo(it.filename, date_time=it.date_time)
+            zi.compress_type = it.compress_type
+            zi.external_attr = it.external_attr
+            zout.writestr(zi, data)
+    if zipfile.ZipFile(tmp).testzip() is not None:
+        os.remove(tmp); raise RuntimeError("repackaged zip failed validation: " + path)
+    os.replace(tmp, path)
+    return moved
+
+def geocode_city(name, retries=3):
+    """Resolve (lat, lon) for a city name via Nominatim (keyless), or None if it
+    cannot be found or the service is unreachable. Retries transient errors in
+    the same style as the gws helpers."""
+    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(
+        {"q": name, "format": "json", "limit": 1})
+    req = urllib.request.Request(url, headers={   # Nominatim requires a UA
+        "User-Agent": "aaif-create-chapter/1.0 (AAIF chapter cloner; +https://github.com/aaif/meetups)"})
+    for i in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                data = json.loads(r.read().decode("utf-8"))
+            if data:
+                return float(data[0]["lat"]), float(data[0]["lon"])
+            return None   # empty result -> genuinely un-geocodable (e.g. "Tatooine")
+        except Exception:
+            if i < retries - 1:
+                time.sleep(2 * (i + 1))
+                continue
+            return None
+    return None
+
+def resolve_latlon(name, lat, lon):
+    """Pick coordinates for the map dot: explicit --lat/--lon override first,
+    else geocode the city name. Returns (lat, lon) or None (dot stays at SF)."""
+    if lat is not None and lon is not None:
+        return (lat, lon)
+    if lat is not None or lon is not None:
+        print("WARNING: --lat and --lon must be given together; ignoring the lone "
+              "value and geocoding %r instead." % name)
+    return geocode_city(name)
+
+# ----------------------------------------------------------------------------
 # Drive helpers (via the gws CLI)
 # ----------------------------------------------------------------------------
 _TRANSIENT = ("timed out", "internalError", "HTTP request failed",
@@ -255,13 +406,21 @@ def clone_and_rebrand(folder_id, parent, name, ctx, indent=""):
                 tmp = os.path.join(ctx["tmp"], "f" + copy_id + ext)
                 gws_download(copy_id, tmp)
                 n = rebrand_file(tmp, ctx["name"], ctx["upper"], ctx["slug"])
-                if n:
+                # Slides.pptx carries the network-map dot on slide 5; move it to
+                # the new city when we have coordinates (rebrand_file only fixed
+                # the label text). Gate the upload on either change.
+                if cname == "Slides.pptx" and ctx.get("latlon"):
+                    moved = reposition_map_marker(tmp, ctx["name"], *ctx["latlon"])
+                else:
+                    moved = 0
+                if n or moved:
                     gws_upload(copy_id, tmp, MIME_BY_EXT[ext])
                 left = residual_tokens(tmp)
                 if left:
                     ctx["residuals"].append((cname, left))
                 flag = "  !! residual %s" % left if left else ""
-                print("%s  - %s (%d parts)%s" % (indent, cname, n, flag))
+                dot = " +map dot" if moved else ""
+                print("%s  - %s (%d parts%s)%s" % (indent, cname, n, dot, flag))
                 os.remove(tmp)
             else:
                 print("%s  - %s (copied)" % (indent, cname))
@@ -272,6 +431,8 @@ def main():
     ap.add_argument("--city", required=True, help='Full city name, e.g. "New York"')
     ap.add_argument("--slug", help="Luma slug override (default: city, lowercased, no spaces)")
     ap.add_argument("--dry-run", action="store_true", help="Plan only; create nothing")
+    ap.add_argument("--lat", type=float, help="City latitude (use with --lon) to override geocoding of the map dot")
+    ap.add_argument("--lon", type=float, help="City longitude (use with --lat) to override geocoding of the map dot")
     ap.add_argument("--rebrand-local", metavar="DIR",
                     help="Rebrand .pptx/.docx/.xlsx in a local dir (no Drive); for testing")
     a = ap.parse_args()
@@ -283,6 +444,15 @@ def main():
     print("Upper: %s" % upper)
     print("Slug : aaif-%s  ->  https://luma.com/aaif-%s" % (slug, slug))
 
+    # Coordinates for the slide-5 network-map dot (override -> geocode -> none).
+    latlon = resolve_latlon(name, a.lat, a.lon)
+    if latlon:
+        src = "override" if (a.lat is not None and a.lon is not None) else "geocoded"
+        print("Coords: %.4f, %.4f (%s)" % (latlon[0], latlon[1], src))
+    else:
+        print("Coords: -- could not resolve %r; the slide-5 map dot will stay at "
+              "San Francisco (fix it manually, or re-run with --lat/--lon)." % name)
+
     if a.rebrand_local:
         residual_any = False
         for root, _d, files in os.walk(a.rebrand_local):
@@ -290,10 +460,13 @@ def main():
                 if os.path.splitext(f)[1].lower() in MIME_BY_EXT:
                     p = os.path.join(root, f)
                     n = rebrand_file(p, name, upper, slug)
+                    moved = reposition_map_marker(p, name, *latlon) \
+                        if f == "Slides.pptx" and latlon else 0
                     left = residual_tokens(p)
                     if left:
                         residual_any = True
-                    print("  %s: %d parts%s" % (f, n, ("  !! " + str(left)) if left else ""))
+                    print("  %s: %d parts%s%s" % (f, n, " +map dot" if moved else "",
+                                                  ("  !! " + str(left)) if left else ""))
         if residual_any:
             sys.exit("FAIL: residual source tokens remain after rebrand (see !! above).")
         return
@@ -318,7 +491,7 @@ def main():
             print("[dry-run] NOTE: could not verify the Luma page aaif-%s; check it manually." % slug)
         return
 
-    ctx = {"name": name, "upper": upper, "slug": slug, "residuals": [],
+    ctx = {"name": name, "upper": upper, "slug": slug, "residuals": [], "latlon": latlon,
            "tmp": os.path.join(os.environ.get("TMPDIR", "/tmp"), "aaif_chapter")}
     os.makedirs(ctx["tmp"], exist_ok=True)
     print()
