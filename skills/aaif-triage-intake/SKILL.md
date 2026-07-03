@@ -19,10 +19,12 @@ sheet's structure.
 ## Status model (drives the queue and the sheet's cell colors)
 
 The Status values (dropdown on column A, matched exactly by the sheet's
-whole-row colors): `New` (blue) → `In progress` (orange) → `Accepted` (green) /
-`Denied` (maroon); `Inactive` (gray); and `Existing (from MLOps)` (**violet**) for a
-prior organizer imported from the MLOps community. A **blank** Status cell is treated
-as `New`. Two overrides beat the status color: a **data error** (missing/invalid email
+whole-row colors): `New` (blue) → `In progress` (orange) → `Tentative` (teal) →
+`Accepted` (green) / `Denied` (maroon); `Inactive` (gray); and `Existing (from MLOps)`
+(**violet**) for a prior organizer imported from the MLOps community. `Tentative` is a
+real dropdown value: it marks a candidate who has passed LinkedIn vetting but isn't yet
+accepted (pending the interview / chapter-champs intro in the review flow below). A
+**blank** Status cell is treated as `New`. Two overrides beat the status color: a **data error** (missing/invalid email
 or broken LinkedIn) paints the row bright red, and an **SLA breach** — a `New`/blank
 row older than 1 week (of a 2-week response SLA) — paints it pink. Acting on a row
 (moving it off `New`) clears the pink. Each role tab also has `Reviewed by`,

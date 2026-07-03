@@ -110,9 +110,15 @@ def color_rule_plan(cfs):
     """Pure planner for install_colors: given a tab's conditionalFormats, return
     (stale_indices_desc, base_index). stale = our own color rules to delete
     (matched by formula); base = insert index just BELOW the bright-red error
-    rule so it keeps top priority. Testable without touching Sheets."""
+    rule so it keeps top priority — computed from the red rule's ACTUAL position
+    (not assumed to be index 0), adjusted for the stale rules deleted above it,
+    since deletes and adds run in one batch. Testable without touching Sheets."""
     stale = [i for i, cf in enumerate(cfs) if formula_of(cf) in COLOR_FORMULAS]
-    base = 1 if any(_is_red(cf) for cf in cfs) else 0
+    red = next((i for i, cf in enumerate(cfs) if _is_red(cf)), None)
+    if red is None:
+        base = 0
+    else:
+        base = red - sum(1 for s in stale if s < red) + 1
     return sorted(stale, reverse=True), base
 
 

@@ -63,6 +63,20 @@ class TestColorRulePlan(unittest.TestCase):
         self.assertEqual(stale, [2, 1])   # descending, red at index 0 untouched
         self.assertEqual(base, 1)
 
+    def test_base_follows_red_when_not_first(self):
+        # red is NOT at index 0 (a Status color rule precedes it); we must still
+        # insert just below red, not at index 1.
+        other = _our_rule('=$A2="In progress"')   # not ours, not red -> not stale
+        stale, base = clean.color_rule_plan([other, _red_rule()])
+        self.assertEqual(stale, [])
+        self.assertEqual(base, 2)                  # just below red at index 1
+
+    def test_base_accounts_for_stale_deleted_above_red(self):
+        # a stale rule sits above red; deleting it shifts red up by one.
+        stale, base = clean.color_rule_plan([_our_rule(clean.AMBER_FORMULA), _red_rule()])
+        self.assertEqual(stale, [0])
+        self.assertEqual(base, 1)                  # red -> index 0 after delete, insert at 1
+
 
 class TestFormulaConsistency(unittest.TestCase):
     def test_detected_set_equals_installed_formulas(self):
