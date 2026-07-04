@@ -125,26 +125,32 @@ def rebrand_part(part_name, data, name, upper, newslug):
         return data
     return xml.encode("utf-8")
 
-def rebrand_file(path, name, upper, newslug):
-    """Rewrite an .pptx/.docx/.xlsx in place. Returns number of parts changed."""
+def _rewrite_zip(path, transform):
+    """Rewrite an OOXML zip in place, mapping each member's bytes through
+    transform(name, data) -> bytes while preserving its ZipInfo, then validating
+    the repackaged zip with testzip(). Returns the number of members whose bytes
+    changed. On a bad repack, removes the temp file and raises (original intact)."""
     tmp = path + ".new"
-    zin = zipfile.ZipFile(path, "r")
-    zout = zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED)
     changed = 0
-    for it in zin.infolist():
-        data = zin.read(it.filename)
-        new = rebrand_part(it.filename, data, name, upper, newslug)
-        if new != data:
-            changed += 1
-        zi = zipfile.ZipInfo(it.filename, date_time=it.date_time)
-        zi.compress_type = it.compress_type
-        zi.external_attr = it.external_attr
-        zout.writestr(zi, new)
-    zin.close(); zout.close()
+    with zipfile.ZipFile(path) as zin, \
+            zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+        for it in zin.infolist():
+            data = zin.read(it.filename)
+            new = transform(it.filename, data)
+            if new != data:
+                changed += 1
+            zi = zipfile.ZipInfo(it.filename, date_time=it.date_time)
+            zi.compress_type = it.compress_type
+            zi.external_attr = it.external_attr
+            zout.writestr(zi, new)
     if zipfile.ZipFile(tmp).testzip() is not None:
         os.remove(tmp); raise RuntimeError("repackaged zip failed validation: " + path)
     os.replace(tmp, path)
     return changed
+
+def rebrand_file(path, name, upper, newslug):
+    """Rewrite an .pptx/.docx/.xlsx in place. Returns number of parts changed."""
+    return _rewrite_zip(path, lambda n, d: rebrand_part(n, d, name, upper, newslug))
 
 def residual_tokens(path):
     """List any stale San Francisco / SF / aaif-sf tokens still present."""
@@ -200,13 +206,16 @@ def lat2y(lat):
                 break
     return y0 + (lat - l0) / (l1 - l0) * (y1 - y0)
 
-# The western Pacific is drawn distorted (Tokyo ~140°E and Sydney ~151°E land at
-# nearly the same x), so a separable projection can't place East-Asia/Oceania by
-# formula. Keep a per-city pixel override table, seeded with the known cases.
+# The western Pacific is drawn distorted: Sydney (~151°E) and Melbourne (~145°E)
+# are dragged WEST to nearly Tokyo's x, so a separable lon/lat projection can't
+# place East-Asia/Oceania. (Tokyo itself IS placed correctly by the linear
+# formula and needs no override — it's only the landmark showing how far west the
+# others land.) Keep a per-city pixel override table for the cities that need it.
 PIXEL_OVERRIDES = {"Seoul": (822, 305), "Sydney": (870, 512), "Melbourne": (836, 543)}
 
 def project_city(name, lat, lon):
-    """Map a city to (x, y) pixels on image18.png (override table first)."""
+    """Map a city to (x, y) pixels on image18.png. Overridden cities take their
+    pixel from the table and IGNORE lat/lon (the map is non-separable there)."""
     if name in PIXEL_OVERRIDES:
         return PIXEL_OVERRIDES[name]
     return lon2x(lon), lat2y(lat)
@@ -226,9 +235,11 @@ def reposition_map_marker(path, city, lat, lon):
     """Move the green dot + its label on slide 5 of a .pptx to (lat, lon).
 
     Returns the number of shapes moved (2 on success) or 0 when there is nothing
-    to move (slide 5 absent, or it has no green marker shapes). Raises if green
-    shapes are present but not exactly 2 can be moved — a template drift the
-    caller should surface loudly, mirroring the residual-token check."""
+    to move (slide 5 absent, or it has no green marker shapes). Raises when slide 5
+    does NOT have exactly one green dot and one green label whose offsets both get
+    rewritten — checking *identity* (one of each), not just the move count, so
+    template drift fails loudly instead of silently stacking the two markers. Like
+    rebrand_file, this raises mid-run; callers clean up the temp file in a finally."""
     with zipfile.ZipFile(path) as z:
         if SLIDE5 not in z.namelist():
             print("      note: %s has no %s; leaving map dot as-is."
@@ -237,19 +248,26 @@ def reposition_map_marker(path, city, lat, lon):
         xml = z.read(SLIDE5).decode("utf-8")
 
     dot_off, label_off = marker_offsets(city, lat, lon)
-    off_re = re.compile(r'<a:off x="-?\d+" y="-?\d+"/>')
-    sp_re = re.compile(r"<p:sp\b[^>]*>.*?</p:sp>", re.S)   # slide 5 shapes are flat
+    off_re = re.compile(r'<a:off x="-?\d+" y="-?\d+"\s*/>')   # tolerate a re-saved " />"
+    sp_re = re.compile(r"<p:sp\b[^>]*>.*?</p:sp>", re.S)      # slide 5 shapes are flat
 
-    green = moved = 0
+    green = 0
+    dot_moved = label_moved = 0
     def move_sp(m):
-        nonlocal green, moved
+        nonlocal green, dot_moved, label_moved
         block = m.group(0)
         if GREEN not in block:
             return block
         green += 1
-        off = dot_off if DOT_EXT_RE.search(block) else label_off
-        block, n = off_re.subn('<a:off x="%d" y="%d"/>' % off, block, count=1)
-        moved += n
+        # The dot is the small square shape; the label is the wide text box.
+        is_dot = bool(DOT_EXT_RE.search(block))
+        block, n = off_re.subn(
+            '<a:off x="%d" y="%d"/>' % (dot_off if is_dot else label_off),
+            block, count=1)
+        if is_dot:
+            dot_moved += n
+        else:
+            label_moved += n
         return block
 
     new_xml = sp_re.sub(move_sp, xml)
@@ -257,30 +275,23 @@ def reposition_map_marker(path, city, lat, lon):
         print("      note: slide 5 has no green (%s) marker shapes; "
               "leaving map dot as-is." % GREEN)
         return 0
-    if moved != 2:
+    if dot_moved != 1 or label_moved != 1:
         raise RuntimeError(
-            "slide 5: expected to move exactly 2 green marker shapes, moved %d "
-            "of %d green shape(s) — template drift? Re-check reposition_map_marker."
-            % (moved, green))
+            "slide 5: expected exactly one green dot and one green label to move, "
+            "but moved %d dot + %d label of %d green shape(s) — template drift? "
+            "Re-check reposition_map_marker / DOT_EXT_RE."
+            % (dot_moved, label_moved, green))
 
-    tmp = path + ".new"
-    with zipfile.ZipFile(path) as zin, \
-            zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
-        for it in zin.infolist():
-            data = new_xml.encode("utf-8") if it.filename == SLIDE5 else zin.read(it.filename)
-            zi = zipfile.ZipInfo(it.filename, date_time=it.date_time)
-            zi.compress_type = it.compress_type
-            zi.external_attr = it.external_attr
-            zout.writestr(zi, data)
-    if zipfile.ZipFile(tmp).testzip() is not None:
-        os.remove(tmp); raise RuntimeError("repackaged zip failed validation: " + path)
-    os.replace(tmp, path)
-    return moved
+    _rewrite_zip(path, lambda n, d: new_xml.encode("utf-8") if n == SLIDE5 else d)
+    return dot_moved + label_moved
 
 def geocode_city(name, retries=3):
-    """Resolve (lat, lon) for a city name via Nominatim (keyless), or None if it
-    cannot be found or the service is unreachable. Retries transient errors in
-    the same style as the gws helpers."""
+    """Resolve (lat, lon) for a city name via Nominatim (keyless), or None if the
+    city can't be found or the service is unreachable. Retries ONLY transient
+    network errors; an empty result is treated as un-geocodable, and an
+    unexpected response shape (API change / captcha page) is reported distinctly
+    rather than masked as a missing city. Either way the caller leaves the dot at
+    San Francisco — geocoding never fails chapter creation."""
     url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(
         {"q": name, "format": "json", "limit": 1})
     req = urllib.request.Request(url, headers={   # Nominatim requires a UA
@@ -288,14 +299,27 @@ def geocode_city(name, retries=3):
     for i in range(retries):
         try:
             with urllib.request.urlopen(req, timeout=15) as r:
-                data = json.loads(r.read().decode("utf-8"))
-            if data:
-                return float(data[0]["lat"]), float(data[0]["lon"])
-            return None   # empty result -> genuinely un-geocodable (e.g. "Tatooine")
-        except Exception:
+                body = r.read().decode("utf-8")
+        except (urllib.error.URLError, TimeoutError) as e:   # transient: retry, then give up
             if i < retries - 1:
                 time.sleep(2 * (i + 1))
                 continue
+            print("WARNING: geocoding %r unreachable (%s); map dot stays at "
+                  "San Francisco." % (name, e))
+            return None
+        try:
+            data = json.loads(body)
+        except ValueError as e:   # includes json.JSONDecodeError; deterministic, don't retry
+            print("WARNING: geocoder returned non-JSON for %r (%s); map dot stays "
+                  "at San Francisco — check the Nominatim API." % (name, e))
+            return None
+        if not data:
+            return None   # empty result -> genuinely un-geocodable (e.g. "Tatooine")
+        try:
+            return float(data[0]["lat"]), float(data[0]["lon"])
+        except (KeyError, IndexError, ValueError, TypeError) as e:
+            print("WARNING: geocoder response for %r is missing lat/lon (%s); map "
+                  "dot stays at San Francisco — check the Nominatim API." % (name, e))
             return None
     return None
 
@@ -404,24 +428,27 @@ def clone_and_rebrand(folder_id, parent, name, ctx, indent=""):
             ext = os.path.splitext(cname)[1].lower()
             if ext in MIME_BY_EXT:
                 tmp = os.path.join(ctx["tmp"], "f" + copy_id + ext)
-                gws_download(copy_id, tmp)
-                n = rebrand_file(tmp, ctx["name"], ctx["upper"], ctx["slug"])
-                # Slides.pptx carries the network-map dot on slide 5; move it to
-                # the new city when we have coordinates (rebrand_file only fixed
-                # the label text). Gate the upload on either change.
-                if cname == "Slides.pptx" and ctx.get("latlon"):
-                    moved = reposition_map_marker(tmp, ctx["name"], *ctx["latlon"])
-                else:
-                    moved = 0
-                if n or moved:
-                    gws_upload(copy_id, tmp, MIME_BY_EXT[ext])
-                left = residual_tokens(tmp)
-                if left:
-                    ctx["residuals"].append((cname, left))
-                flag = "  !! residual %s" % left if left else ""
-                dot = " +map dot" if moved else ""
-                print("%s  - %s (%d parts%s)%s" % (indent, cname, n, dot, flag))
-                os.remove(tmp)
+                try:
+                    gws_download(copy_id, tmp)
+                    n = rebrand_file(tmp, ctx["name"], ctx["upper"], ctx["slug"])
+                    # Slides.pptx carries the network-map dot on slide 5; move it to
+                    # the new city when we have coordinates (rebrand_file only fixed
+                    # the label text). Gate the upload on either change.
+                    if cname == "Slides.pptx" and ctx.get("latlon"):
+                        moved = reposition_map_marker(tmp, ctx["name"], *ctx["latlon"])
+                    else:
+                        moved = 0
+                    if n or moved:
+                        gws_upload(copy_id, tmp, MIME_BY_EXT[ext])
+                    left = residual_tokens(tmp)
+                    if left:
+                        ctx["residuals"].append((cname, left))
+                    flag = "  !! residual %s" % left if left else ""
+                    dot = " +map dot" if moved else ""
+                    print("%s  - %s (%d parts%s)%s" % (indent, cname, n, dot, flag))
+                finally:
+                    if os.path.exists(tmp):
+                        os.remove(tmp)
             else:
                 print("%s  - %s (copied)" % (indent, cname))
     return new_id
@@ -450,8 +477,10 @@ def main():
         src = "override" if (a.lat is not None and a.lon is not None) else "geocoded"
         print("Coords: %.4f, %.4f (%s)" % (latlon[0], latlon[1], src))
     else:
-        print("Coords: -- could not resolve %r; the slide-5 map dot will stay at "
-              "San Francisco (fix it manually, or re-run with --lat/--lon)." % name)
+        print("Coords: --")
+        print("WARNING: could not resolve coordinates for %r; the slide-5 map dot "
+              "will stay at San Francisco (fix it manually, or re-run with "
+              "--lat/--lon)." % name)
 
     if a.rebrand_local:
         residual_any = False

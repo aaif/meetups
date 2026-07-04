@@ -41,17 +41,30 @@ OTHER_SP = (
 )
 
 
+def green_sp(off, ext, text=None, off_selfclose="/>"):
+    """A green shape with a chosen off/ext, optional text run, and control over
+    the <a:off .../> self-close spacing (to exercise re-saved ' />' output)."""
+    body = ("<p:txBody><a:p><a:r><a:t>%s</a:t></a:r></a:p></p:txBody>" % text
+            if text is not None else "")
+    return ('<p:sp><p:spPr><a:xfrm><a:off x="%d" y="%d"%s'
+            '<a:ext cx="%d" cy="%d"/></a:xfrm>'
+            '<a:solidFill><a:srgbClr val="14964A"/></a:solidFill></p:spPr>%s</p:sp>'
+            % (off[0], off[1], off_selfclose, ext[0], ext[1], body))
+
+
 def slide5(*shapes):
     return ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<p:sld %s %s><p:cSld><p:spTree>%s</p:spTree></p:cSld></p:sld>'
             % (P, A, "".join(shapes)))
 
 
-def make_pptx(path, slide_xml=None):
+def make_pptx(path, slide_xml=None, extra=None):
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", "<Types/>")
         if slide_xml is not None:
             z.writestr(cc.SLIDE5, slide_xml)
+        for member_name, data in (extra or {}).items():
+            z.writestr(member_name, data)
 
 
 def offsets_by_shape(path):
@@ -88,6 +101,22 @@ class TestProjection(unittest.TestCase):
         # Overridden cities ignore lat/lon entirely.
         self.assertEqual(cc.project_city("Seoul", 0.0, 0.0), (822, 305))
         self.assertEqual(cc.project_city("Sydney", 99.0, 99.0), (870, 512))
+
+    def test_lat2y_hits_every_anchor_exactly(self):
+        for lat, y in cc.LAT_ANCHORS:
+            self.assertAlmostEqual(cc.lat2y(lat), y, places=6, msg="anchor %s" % lat)
+
+    def test_lat2y_interpolates_and_covers_southern_hemisphere(self):
+        # Midpoint of the (0.0, 398) -> (-34.8, 525) segment (a formula-driven
+        # southern city like Cape Town lands here; SH is otherwise all overrides).
+        self.assertAlmostEqual(cc.lat2y(-17.4), (398 + 525) / 2, places=3)
+        self.assertTrue(398 < cc.lat2y(-33.9) < 525)  # Cape Town, interpolated
+
+    def test_lat2y_extrapolates_past_the_end_anchors(self):
+        # Beyond the anchor range it extrapolates (does NOT clamp): a far-north
+        # city projects above the top anchor's y, a far-south one below the last.
+        self.assertLess(cc.lat2y(70.0), cc.LAT_ANCHORS[0][1])
+        self.assertGreater(cc.lat2y(-60.0), cc.LAT_ANCHORS[-1][1])
 
 
 class TestReposition(unittest.TestCase):
@@ -133,6 +162,49 @@ class TestReposition(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 cc.reposition_map_marker(p, "New York", 40.71, -74.01)
 
+    def test_guard_raises_when_both_green_match_dot_ext(self):
+        # Identity, not count: two square green shapes -> both classified as dot,
+        # zero labels -> must raise even though moved == 2 (would otherwise stack
+        # the markers silently).
+        two_dots = slide5(green_sp((1, 2), (155448, 155448)),
+                          green_sp((3, 4), (155448, 155448), text="X"))
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Slides.pptx")
+            make_pptx(p, two_dots)
+            with self.assertRaises(RuntimeError):
+                cc.reposition_map_marker(p, "New York", 40.71, -74.01)
+
+    def test_guard_raises_when_neither_green_matches_dot_ext(self):
+        # Both green shapes are wide -> both classified as label, zero dots -> raise.
+        two_labels = slide5(green_sp((1, 2), (999999, 111111)),
+                            green_sp((3, 4), (888888, 222222), text="X"))
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Slides.pptx")
+            make_pptx(p, two_labels)
+            with self.assertRaises(RuntimeError):
+                cc.reposition_map_marker(p, "New York", 40.71, -74.01)
+
+    def test_off_regex_tolerates_respaced_selfclose(self):
+        # A deck re-saved as '<a:off ... />' (space before />) must still move.
+        respaced = slide5(green_sp((1, 2), (155448, 155448), off_selfclose=" />"),
+                         green_sp((3, 4), (2011680, 201168), text="SF", off_selfclose=" />"))
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Slides.pptx")
+            make_pptx(p, respaced)
+            self.assertEqual(cc.reposition_map_marker(p, "New York", 40.71, -74.01), 2)
+
+    def test_rewrite_preserves_other_zip_members(self):
+        # A non-slide5 binary member (like image18.png) must round-trip byte-identical.
+        blob = bytes(range(256)) * 8
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Slides.pptx")
+            make_pptx(p, slide5(DOT_SP, LABEL_SP),
+                      extra={"ppt/media/image18.png": blob})
+            cc.reposition_map_marker(p, "New York", 40.71, -74.01)
+            with zipfile.ZipFile(p) as z:
+                self.assertEqual(z.read("ppt/media/image18.png"), blob)
+                self.assertIn("[Content_Types].xml", z.namelist())
+
 
 class TestResolveLatlon(unittest.TestCase):
     def test_override_bypasses_geocoding(self):
@@ -156,6 +228,64 @@ class TestResolveLatlon(unittest.TestCase):
             self.assertIsNone(cc.resolve_latlon("Tatooine", None, None))
         finally:
             cc.geocode_city = orig
+
+
+class _FakeResp:
+    def __init__(self, body):
+        self._body = body.encode("utf-8") if isinstance(body, str) else body
+    def read(self):
+        return self._body
+    def __enter__(self):
+        return self
+    def __exit__(self, *a):
+        return False
+
+
+class TestGeocodeCity(unittest.TestCase):
+    """geocode_city with urlopen stubbed — no network. Patches time.sleep so the
+    retry path doesn't actually back off."""
+
+    def _patch(self, urlopen):
+        self._orig_open = cc.urllib.request.urlopen
+        self._orig_sleep = cc.time.sleep
+        cc.urllib.request.urlopen = urlopen
+        cc.time.sleep = lambda *_a: None
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        cc.urllib.request.urlopen = self._orig_open
+        cc.time.sleep = self._orig_sleep
+
+    def test_success_parses_lat_lon(self):
+        self._patch(lambda req, timeout=0: _FakeResp('[{"lat":"40.71","lon":"-74.01"}]'))
+        self.assertEqual(cc.geocode_city("New York"), (40.71, -74.01))
+
+    def test_empty_result_is_none(self):
+        self._patch(lambda req, timeout=0: _FakeResp("[]"))
+        self.assertIsNone(cc.geocode_city("Nowhereville"))
+
+    def test_network_error_retries_then_none(self):
+        import urllib.error
+        calls = []
+        def boom(req, timeout=0):
+            calls.append(1)
+            raise urllib.error.URLError("unreachable")
+        self._patch(boom)
+        self.assertIsNone(cc.geocode_city("Paris", retries=3))
+        self.assertEqual(len(calls), 3)  # retried all attempts
+
+    def test_non_json_response_is_none_without_retry(self):
+        calls = []
+        def html(req, timeout=0):
+            calls.append(1)
+            return _FakeResp("<html>captcha</html>")
+        self._patch(html)
+        self.assertIsNone(cc.geocode_city("Paris", retries=3))
+        self.assertEqual(len(calls), 1)  # deterministic -> not retried
+
+    def test_missing_lat_lon_fields_is_none(self):
+        self._patch(lambda req, timeout=0: _FakeResp('[{"name":"somewhere"}]'))
+        self.assertIsNone(cc.geocode_city("Paris"))
 
 
 if __name__ == "__main__":
