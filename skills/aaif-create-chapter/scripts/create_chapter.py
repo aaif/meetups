@@ -132,20 +132,25 @@ def _rewrite_zip(path, transform):
     changed. On a bad repack, removes the temp file and raises (original intact)."""
     tmp = path + ".new"
     changed = 0
-    with zipfile.ZipFile(path) as zin, \
-            zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
-        for it in zin.infolist():
-            data = zin.read(it.filename)
-            new = transform(it.filename, data)
-            if new != data:
-                changed += 1
-            zi = zipfile.ZipInfo(it.filename, date_time=it.date_time)
-            zi.compress_type = it.compress_type
-            zi.external_attr = it.external_attr
-            zout.writestr(zi, new)
-    if zipfile.ZipFile(tmp).testzip() is not None:
-        os.remove(tmp); raise RuntimeError("repackaged zip failed validation: " + path)
-    os.replace(tmp, path)
+    try:
+        with zipfile.ZipFile(path) as zin, \
+                zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+            for it in zin.infolist():
+                data = zin.read(it.filename)
+                new = transform(it.filename, data)
+                if new != data:
+                    changed += 1
+                zi = zipfile.ZipInfo(it.filename, date_time=it.date_time)
+                zi.compress_type = it.compress_type
+                zi.external_attr = it.external_attr
+                zout.writestr(zi, new)
+        with zipfile.ZipFile(tmp) as zt:   # close the handle before os.replace
+            if zt.testzip() is not None:
+                raise RuntimeError("repackaged zip failed validation: " + path)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):   # cleared on success by os.replace; else a leftover
+            os.remove(tmp)
     return changed
 
 def rebrand_file(path, name, upper, newslug):

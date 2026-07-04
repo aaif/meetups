@@ -1,7 +1,7 @@
 ---
 name: aaif-create-chapter
 description: Create a new AAIF city chapter in the "Chapters" Google Drive by cloning TemplateCity and rebranding all assets. Use when asked to add/launch/set up a new AAIF city, chapter, or location.
-argument-hint: '<City Name> [--slug <lumaslug>]'
+argument-hint: '<City Name> [--slug <lumaslug>] [--lat <deg> --lon <deg>]'
 ---
 
 # Create AAIF Chapter
