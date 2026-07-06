@@ -1,6 +1,6 @@
 ---
 name: aaif-create-event
-description: Create a new event in an AAIF chapter or online series by cloning the example section in its Event Tracker.docx and stamping all phase task due-dates from the event date. Use when asked to add/schedule/set up a new event for a chapter or series.
+description: Create a new event in an AAIF chapter or online series by cloning the example section in its Event Tracker.docx and stamping all phase task due-dates from the event date; can then create the live Luma event page from the entry (proposal shown first, created only on explicit user approval). Use when asked to add/schedule/set up a new event for a chapter or series, or to put an event on Luma.
 argument-hint: '<chapter|series> --title "..." --date "..."'
 ---
 
@@ -58,3 +58,43 @@ deterministic docx edit on a local file.** Prereq: `gws` installed and authentic
    ```
 
 Use `--dry-run` in step 3 first if you want to preview without modifying the local file.
+
+## Put the event on Luma (LIVE — always confirm first)
+
+Every event needs a Luma page. `scripts/luma_push.py` creates it on the
+chapter/series calendar from the tracker entry — **when Luma is connected**,
+i.e. that calendar's API key is in `LUMA_API_KEY` or the keychain
+(`security add-generic-password -s luma-api-key -a aaif -w THE_KEY`; Luma Plus,
+keys are per-calendar). The script detects this itself and its dry-run says so:
+
+- **Connected** → show the user the printed proposal; on their explicit approval
+  (and ONLY then — Luma is live and guest-facing) re-run with `--create`.
+- **Not connected** → do NOT try to work around it: skip the automated push and
+  ask the user to create the page manually at luma.com using the proposal's
+  details, then record the URL in the tracker's LUMA URL field (or set up the
+  key and re-run).
+
+1. **Prepare the assets**: write the page copy with `aaif-luma-description` and
+   save it as markdown; export the event banner to PNG for the cover
+   (`soffice --headless --convert-to png Banner.pptx`). Determine the city's IANA
+   timezone yourself and include it in the proposal for the user to check.
+
+2. **Propose (default, sends nothing):**
+   ```
+   python3 ${CLAUDE_SKILL_DIR}/scripts/luma_push.py tracker.docx "Eval Night · Builder Series" \
+     --timezone America/Los_Angeles --description-file luma.md --cover banner.png \
+     --host "maya@example.com" --host "vol@example.com:check-in"
+   ```
+   It prints the full payload, hosts, and which calendar the API key targets.
+   Show all of it to the user. The start time comes from the first `HH:MM` in
+   DATE & TIME (a second one is the end time; else `--duration-hours`, default 3).
+   It aborts if the tracker's LUMA URL already holds an event page (`--force` to override).
+
+3. **Create — only after the user says yes:** re-run the same command with
+   `--create`. It uploads the cover, creates the event, adds hosts, writes the
+   new event URL into the tracker's LUMA URL field (re-upload the docx to Drive),
+   and prints the URL.
+
+4. **Verify**: open the printed URL and check name/time/venue/cover/description
+   against the proposal; confirm the hosts appear. Later detail changes go
+   through `aaif-update-event` (which diffs against the live page), not a re-push.

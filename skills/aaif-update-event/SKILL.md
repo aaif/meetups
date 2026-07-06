@@ -1,6 +1,6 @@
 ---
 name: aaif-update-event
-description: Apply a change to an existing AAIF event (chapter or series) — edit detail fields like speakers/venue/capacity, or move the date and recompute all task due-dates, then flag which marketing/banner assets are now stale. Use when asked to update/change/edit an event's details or date.
+description: Apply a change to an existing AAIF event (chapter or series) — edit detail fields like speakers/venue/capacity, or move the date and recompute all task due-dates, then flag which marketing/banner assets are now stale; can also sync the change to the live Luma event page (diff shown first, pushed only on explicit user approval). Use when asked to update/change/edit an event's details or date.
 argument-hint: '<chapter|series> <event> [--set "LABEL=value"] [--date "..."]'
 ---
 
@@ -58,3 +58,33 @@ deterministic docx edit on a local file.** Prereq: `gws` installed and authentic
 
 The script prints the stale-asset list in step 2 — surface that so the organizer knows
 which content/banner skills to re-run.
+
+## Sync the change to Luma (LIVE — always confirm first)
+
+If the event has a Luma page (the tracker's LUMA URL holds its event URL, written
+by `aaif-create-event`'s push), `scripts/luma_sync.py` diffs the tracker against
+the live event and pushes only the changed fields. It detects whether Luma is
+connected (that calendar's API key in `LUMA_API_KEY` or keychain item
+`luma-api-key`; see `aaif-create-event` for setup):
+
+- **Connected** → show the user the printed diff; on their explicit approval
+  (and ONLY then — Luma is live, and it emails guests about changes unless
+  `--quiet`) re-run with `--apply`.
+- **Not connected** → the script prints the desired values as a manual
+  checklist; pass it to the user to apply on the Luma page by hand.
+
+```
+# diff only (default, sends nothing) — show this to the user
+python3 ${CLAUDE_SKILL_DIR}/scripts/luma_sync.py tracker.docx "Agentic AI Night" \
+  --timezone Europe/Berlin
+
+# push, only after the user says yes; add --quiet to skip guest notifications
+python3 ${CLAUDE_SKILL_DIR}/scripts/luma_sync.py tracker.docx "Agentic AI Night" \
+  --timezone Europe/Berlin --apply
+```
+
+Add `--description-file new.md` / `--cover new.png` only when replacing those —
+omitted means left alone. After `--apply` it re-fetches the event and verifies
+the diff is clean. **Event cancellation is deliberately not automated** (it's
+irreversible and refunds/notifies everyone) — if the user asks to cancel, point
+them to the Luma page.

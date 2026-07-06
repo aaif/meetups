@@ -1,0 +1,119 @@
+import datetime as dt
+import unittest
+from unittest import mock
+
+from aaif_meetups import luma
+
+
+def view(**details):
+    return {"title": details.get("EVENT TITLE", ""), "details": details,
+            "phases": [], "date": None}
+
+
+IRL = {"EVENT TITLE": "Eval Night · Builder Series",
+       "DATE & TIME": "Wed · August 12, 2026 · 18:00 — late",
+       "VENUE": "Github HQ", "LOCATION / CITY": "San Francisco",
+       "CAPACITY / RSVPS": "120 RSVPs", "LUMA URL": "luma.com/aaif-sanfrancisco"}
+
+
+class TestAvailable(unittest.TestCase):
+    def test_env_key_means_connected(self):
+        with mock.patch.dict("os.environ", {"LUMA_API_KEY": "secret"}):
+            self.assertTrue(luma.available())
+
+    def test_no_key_anywhere_means_not_connected_not_raising(self):
+        with mock.patch.dict("os.environ", {"LUMA_API_KEY": ""}), \
+                mock.patch("subprocess.run",
+                           return_value=mock.Mock(returncode=1, stdout="")):
+            self.assertFalse(luma.available())
+
+
+class TestSlugOfUrl(unittest.TestCase):
+    def test_forms(self):
+        for given in ("https://luma.com/ia70fwmm", "https://lu.ma/ia70fwmm/",
+                      "luma.com/ia70fwmm?utm=x", "ia70fwmm"):
+            self.assertEqual(luma.slug_of_url(given), "ia70fwmm", given)
+
+
+class TestEventTimes(unittest.TestCase):
+    def test_start_plus_duration(self):
+        start, end = luma.event_times(IRL["DATE & TIME"], "America/Los_Angeles", 3)
+        self.assertEqual((start.year, start.month, start.day, start.hour, start.minute),
+                         (2026, 8, 12, 18, 0))
+        self.assertEqual(end - start, dt.timedelta(hours=3))
+
+    def test_explicit_end_time(self):
+        start, end = luma.event_times("July 8, 2026 · 17:30 — 20:30", "Europe/Berlin", 3)
+        self.assertEqual((start.hour, end.hour, end.minute), (17, 20, 30))
+
+    def test_end_past_midnight_rolls_to_next_day(self):
+        start, end = luma.event_times("July 8, 2026 · 21:00 — 00:30", "Europe/Berlin", 3)
+        self.assertEqual(end.day, start.day + 1)
+
+    def test_missing_time_raises(self):
+        with self.assertRaises(ValueError):
+            luma.event_times("Wed · August 12, 2026 · evening", "UTC", 3)
+
+    def test_iso_utc_converts_zone(self):
+        start, _ = luma.event_times(IRL["DATE & TIME"], "America/Los_Angeles", 3)
+        self.assertEqual(luma.iso_utc(start), "2026-08-13T01:00:00.000Z")  # PDT = UTC-7
+
+
+class TestEventPayload(unittest.TestCase):
+    def test_in_person(self):
+        p = luma.event_payload(view(**IRL), "America/Los_Angeles",
+                               description_md="# Agenda", slug="aaif-sf-evalnight")
+        self.assertEqual(p["name"], "Eval Night · Builder Series")
+        self.assertEqual(p["timezone"], "America/Los_Angeles")
+        self.assertEqual(p["geo_address_json"],
+                         {"type": "manual", "address": "Github HQ, San Francisco"})
+        self.assertEqual(p["max_capacity"], 120)
+        self.assertEqual(p["visibility"], "public")
+        self.assertEqual(p["description_md"], "# Agenda")
+        self.assertEqual(p["slug"], "aaif-sf-evalnight")
+        self.assertNotIn("meeting_url", p)
+
+    def test_online_series(self):
+        p = luma.event_payload(view(**{
+            "EVENT TITLE": "Reading Group: Loop Engineering",
+            "DATE & TIME": "July 20, 2026 · 9:00",
+            "STREAM / JOIN LINK": "join at lu.ma/ia70fwmm"}), "UTC", 1.0)
+        self.assertEqual(p["meeting_url"], "https://lu.ma/ia70fwmm")
+        self.assertNotIn("geo_address_json", p)
+        self.assertNotIn("max_capacity", p)
+
+    def test_placeholder_capacity_and_no_title(self):
+        self.assertIsNone(luma._capacity_of("TBD"))
+        with self.assertRaises(ValueError):
+            luma.event_payload(view(**{"DATE & TIME": "July 8, 2026 · 18:00"}), "UTC")
+
+
+class TestDiffPayload(unittest.TestCase):
+    LIVE = {"name": "Eval Night · Builder Series",
+            "start_at": "2026-08-13T01:00:00.673Z",
+            "timezone": "America/Los_Angeles",
+            "geo_address_json": {"type": "manual", "address": "Github HQ, San Francisco",
+                                 "description": "extra provider field"},
+            "max_capacity": 120}
+
+    def test_no_change_is_empty(self):
+        desired = {"name": "Eval Night · Builder Series",
+                   "start_at": "2026-08-13T01:00:00.000Z",   # same instant, different ms
+                   "timezone": "America/Los_Angeles",
+                   "geo_address_json": {"type": "manual",
+                                        "address": "Github HQ, San Francisco"},
+                   "max_capacity": 120}
+        self.assertEqual(luma.diff_payload(self.LIVE, desired), {})
+
+    def test_changes_reported_pairwise(self):
+        d = luma.diff_payload(self.LIVE, {"name": "Eval Night v2", "max_capacity": 150})
+        self.assertEqual(d, {"name": ("Eval Night · Builder Series", "Eval Night v2"),
+                             "max_capacity": (120, 150)})
+
+    def test_new_field_counts_as_change(self):
+        d = luma.diff_payload(self.LIVE, {"description_md": "# New copy"})
+        self.assertEqual(d, {"description_md": (None, "# New copy")})
+
+
+if __name__ == "__main__":
+    unittest.main()
