@@ -80,11 +80,23 @@ class TestColorRulePlan(unittest.TestCase):
 
 class TestFormulaConsistency(unittest.TestCase):
     def test_detected_set_equals_installed_formulas(self):
-        # Guards the idempotency contract: the set used to find our rules must be
-        # exactly the formulas we install.
+        # Guards the idempotency contract: the set used to find our rules must
+        # cover the formulas we install (plus retired ones, matched as stale).
         self.assertEqual(clean.COLOR_FORMULAS,
                          {clean.VIOLET_FORMULA, clean.AMBER_FORMULA, clean.GREEN_FORMULA})
+        self.assertEqual(clean.STALE_COLOR_FORMULAS,
+                         clean.COLOR_FORMULAS | clean.LEGACY_COLOR_FORMULAS)
         self.assertEqual(clean.AMBER_FORMULA, '=$H2<>""')
+        # Green must reject ANY "Other..." placeholder, not just the bare "Other".
+        self.assertEqual(clean.GREEN_FORMULA, '=AND($G2<>"",LEFT($G2,5)<>"Other")')
+
+    def test_legacy_green_rule_matched_stale(self):
+        # A rule installed by an earlier release (old green formula) must be
+        # deleted on refresh, not left to stack next to the new one.
+        legacy = _our_rule('=AND($G2<>"",$G2<>"Other")')
+        stale, base = clean.color_rule_plan([_red_rule(), legacy])
+        self.assertEqual(stale, [1])
+        self.assertEqual(base, 1)
 
 
 if __name__ == "__main__":
