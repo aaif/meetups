@@ -30,3 +30,23 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
       - name: Validate marketplace and plugin manifests
         run: claude plugin validate .
+
+  pytest:
+    # The stdlib-only helper library + skill scripts. The pre-commit job's ruff
+    # hook is pyflakes-only and does NOT resolve imports, so this job is what
+    # actually catches a broken import/rename (e.g. a stale `from aaif_meetups`).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: pip install pytest
+      - name: Library unit tests
+        run: python -m pytest lib/aaif_events/tests -q
+      - name: Skill script tests
+        run: |
+          for t in skills/*/scripts/test_*.py; do
+            echo "== $t =="
+            python "$t"
+          done

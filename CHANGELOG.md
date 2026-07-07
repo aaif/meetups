@@ -4,10 +4,25 @@ All notable changes to the **AAIF Community Events Toolkit** plugin are document
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 plugin version is the `version` field in `.claude-plugin/plugin.json`.
 
+## [0.5.0]
+
+### Changed
+- **Renamed "meetup" → "event" across the plugin.** Legal flagged that "Meetup"
+  is a Meetup.com trademark, so all forward-facing wording now uses the **AAIF
+  Community Events** brand. Breaking: plugin id `aaif-meetups` → `aaif-events`,
+  Python package `lib/aaif_meetups` → `lib/aaif_events` (all imports updated), and
+  repo URL → `github.com/aaif/events`. Install as `/plugin install aaif-events@aaif`.
+  Skill invocation ids (`/aaif-<skill>`) are unchanged; only descriptions/copy moved.
+
+### Added
+- CI now runs the Python test suite — a `pytest` job in `validate.yml` executes the
+  `lib/aaif_events/tests` suite and every `skills/*/scripts/test_*.py`, so import
+  breakage is caught in CI rather than only locally.
+
 ## [0.4.0]
 
 ### Added
-- **Luma API integration** (`lib/aaif_meetups/luma.py`): stdlib client for the
+- **Luma API integration** (`lib/aaif_events/luma.py`): stdlib client for the
   Luma public API (`public-api.luma.com`, per-calendar key from `LUMA_API_KEY`
   or the `luma-api-key` keychain item; Luma Plus required) with pure, unit-tested
   payload builders. All live writes sit behind explicit `--create`/`--apply`
