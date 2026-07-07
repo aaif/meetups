@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__),
                                                  "..", "..", "..", "lib")))
 sys.path.insert(0, os.path.dirname(__file__))
 import event_status  # noqa: E402
-from aaif_meetups.tracker import Task  # noqa: E402
+from aaif_events.tracker import Task  # noqa: E402
 
 
 class TestClassify(unittest.TestCase):

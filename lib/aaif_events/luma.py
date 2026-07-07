@@ -24,7 +24,7 @@ import urllib.parse
 import urllib.request
 from zoneinfo import ZoneInfo
 
-from aaif_meetups import tracker
+from aaif_events import tracker
 
 BASE = "https://public-api.luma.com"
 KEYCHAIN_SERVICE = "luma-api-key"

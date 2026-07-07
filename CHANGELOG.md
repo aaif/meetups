@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the **AAIF Meetups Toolkit** plugin are documented here.
+All notable changes to the **AAIF Community Events Toolkit** plugin are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 plugin version is the `version` field in `.claude-plugin/plugin.json`.
 

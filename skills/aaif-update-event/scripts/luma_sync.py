@@ -16,7 +16,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "lib"))
-from aaif_meetups import luma, office, tracker  # noqa: E402
+from aaif_events import luma, office, tracker  # noqa: E402
 
 
 def find_event_id(view, override):

@@ -1,15 +1,15 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
-  "name": "aaif-meetups",
-  "displayName": "AAIF Meetups Toolkit",
+  "name": "aaif-events",
+  "displayName": "AAIF Community Events Toolkit",
   "version": "0.4.0",
-  "description": "Skills for running AAIF (Agentic AI Foundation) in-person and online meetups — event content writing (announcements, Luma pages, LinkedIn carousels, recaps, speaker bios/invites, day-of slides, attendee reminders) and chapter ops (spin up a new city chapter or online event series, triage community intake, clean intake data, sync accepted organizers into the chapters list, and push/sync events to Luma with live RSVP stats).",
+  "description": "Skills for running AAIF (Agentic AI Foundation) in-person and online events — event content writing (announcements, Luma pages, LinkedIn carousels, recaps, speaker bios/invites, day-of slides, attendee reminders) and chapter ops (spin up a new city chapter or online event series, triage community intake, clean intake data, sync accepted organizers into the chapters list, and push/sync events to Luma with live RSVP stats).",
   "author": {
     "name": "AAIF",
     "url": "https://github.com/aaif"
   },
-  "homepage": "https://github.com/aaif/meetups",
-  "repository": "https://github.com/aaif/meetups",
+  "homepage": "https://github.com/aaif/events",
+  "repository": "https://github.com/aaif/events",
   "license": "MIT",
-  "keywords": ["aaif", "meetups", "events", "community", "google-workspace", "luma", "linkedin"]
+  "keywords": ["aaif", "events", "community", "google-workspace", "luma", "linkedin"]
 }

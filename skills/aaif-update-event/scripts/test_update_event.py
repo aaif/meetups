@@ -7,10 +7,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__),
                                                  "..", "..", "..", "lib")))
 sys.path.insert(0, os.path.dirname(__file__))
 import update_event  # noqa: E402
-from aaif_meetups import office, tracker  # noqa: E402
+from aaif_events import office, tracker  # noqa: E402
 
 FIX = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..",
-                                   "lib", "aaif_meetups", "tests", "fixtures",
+                                   "lib", "aaif_events", "tests", "fixtures",
                                    "event_tracker_irl.docx"))
 
 

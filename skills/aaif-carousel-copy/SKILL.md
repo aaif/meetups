@@ -1,6 +1,6 @@
 ---
 name: aaif-carousel-copy
-description: Write copy for a 6-slide LinkedIn carousel announcing an AAIF meetup. Use when asked to draft carousel slides/copy for an AAIF event (built from the LinkedIn Carousel template).
+description: Write copy for a 6-slide LinkedIn carousel announcing an AAIF event. Use when asked to draft carousel slides/copy for an AAIF event (built from the LinkedIn Carousel template).
 argument-hint: '[event title / paste tracker entry]'
 ---
 

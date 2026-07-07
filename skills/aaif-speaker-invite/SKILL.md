@@ -1,6 +1,6 @@
 ---
 name: aaif-speaker-invite
-description: Write a short, warm speaker-invite DM or email for an AAIF in-person meetup. Use when asked to draft a speaker invite, outreach DM, or ask-someone-to-speak message for an AAIF event.
+description: Write a short, warm speaker-invite DM or email for an AAIF in-person event. Use when asked to draft a speaker invite, outreach DM, or ask-someone-to-speak message for an AAIF event.
 argument-hint: '[speaker name + event / paste tracker entry]'
 ---
 
@@ -21,7 +21,7 @@ Signal, not numbers.
 ## Example (tested — match this format and voice)
 Maya Chen, Agentic AI Night:
 
-> Hi Maya — I help run AAIF San Francisco, a curated, vendor-neutral meetup for
+> Hi Maya — I help run AAIF San Francisco, a curated, vendor-neutral event for
 > people building agents (no pitches, just folks who ship). I'd love to have you
 > open our June night with a 25-minute talk on tool calling at scale — Tue June
 > 24, evening, in SoMa, ~120 builders. Slides optional; a live walkthrough works

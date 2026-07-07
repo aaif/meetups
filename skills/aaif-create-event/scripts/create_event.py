@@ -8,7 +8,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "lib"))
-from aaif_meetups import office, tracker  # noqa: E402
+from aaif_events import office, tracker  # noqa: E402
 
 # CLI flag -> detail label. Note in-person trackers carry VENUE / LOCATION-CITY,
 # online trackers carry PLATFORM / STREAM-JOIN-LINK — use the flags that match the

@@ -1,6 +1,6 @@
 ---
 name: aaif-attendee-reminder
-description: Write the pre-event reminder to people who RSVP'd to an AAIF meetup (sent ~1 week out and the morning of). Use when asked to draft the attendee reminder / "see you tomorrow" note for an AAIF event.
+description: Write the pre-event reminder to people who RSVP'd to an AAIF event (sent ~1 week out and the morning of). Use when asked to draft the attendee reminder / "see you tomorrow" note for an AAIF event.
 argument-hint: '[event title / paste tracker entry]'
 ---
 

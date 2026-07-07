@@ -2,7 +2,7 @@ import datetime as dt
 import os
 import unittest
 
-from aaif_meetups import office, tracker
+from aaif_events import office, tracker
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures", "event_tracker_irl.docx")
 FIX_ONLINE = os.path.join(os.path.dirname(__file__), "fixtures", "event_tracker_online.docx")

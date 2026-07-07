@@ -1,12 +1,12 @@
 ---
 name: aaif-speaker-bio
-description: Write a speaker bio (a 60-80 word bio + a one-liner) for an AAIF in-person meetup speaker. Use when asked to draft/write a speaker bio for an AAIF event or chapter.
+description: Write a speaker bio (a 60-80 word bio + a one-liner) for an AAIF in-person event speaker. Use when asked to draft/write a speaker bio for an AAIF event or chapter.
 argument-hint: '[speaker name / paste their tracker row]'
 ---
 
 # AAIF Speaker Bio
 
-Produce TWO versions of a speaker bio for an AAIF in-person meetup:
+Produce TWO versions of a speaker bio for an AAIF in-person event:
 1. a **60-80 word** third-person bio, and
 2. a **one-line** version, **max 18 words**.
 

@@ -1,6 +1,6 @@
 ---
 name: aaif-announcement-post
-description: Write the LinkedIn launch/announcement post for an AAIF meetup when RSVPs open. Use when asked to draft the announcement, launch post, or "RSVPs are open" post for an AAIF event.
+description: Write the LinkedIn launch/announcement post for an AAIF event when RSVPs open. Use when asked to draft the announcement, launch post, or "RSVPs are open" post for an AAIF event.
 argument-hint: '[event title / paste tracker entry]'
 ---
 
