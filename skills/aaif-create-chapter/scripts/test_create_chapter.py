@@ -102,6 +102,14 @@ class TestProjection(unittest.TestCase):
         self.assertEqual(cc.project_city("Seoul", 0.0, 0.0), (822, 305))
         self.assertEqual(cc.project_city("Sydney", 99.0, 99.0), (870, 512))
 
+    def test_every_override_pixel_is_within_the_map(self):
+        # A transposed or fat-fingered override (e.g. (3833, 330)) would place the
+        # dot off-canvas and be placed silently. Guard the whole table at once.
+        w, h = cc.MAP_PX
+        for city, (x, y) in cc.PIXEL_OVERRIDES.items():
+            self.assertTrue(0 <= x <= w, "%s x=%d out of 0..%d" % (city, x, w))
+            self.assertTrue(0 <= y <= h, "%s y=%d out of 0..%d" % (city, y, h))
+
     def test_lat2y_hits_every_anchor_exactly(self):
         for lat, y in cc.LAT_ANCHORS:
             self.assertAlmostEqual(cc.lat2y(lat), y, places=6, msg="anchor %s" % lat)
@@ -228,6 +236,33 @@ class TestResolveLatlon(unittest.TestCase):
             self.assertIsNone(cc.resolve_latlon("Tatooine", None, None))
         finally:
             cc.geocode_city = orig
+
+
+class TestMapDotLatlon(unittest.TestCase):
+    def test_override_city_is_placeable_without_geocoding(self):
+        # An override city (placed by name) must stay placeable even if geocoding
+        # would fail — and must NOT hit the network to decide that.
+        calls = []
+        orig = cc.geocode_city
+        cc.geocode_city = lambda name, **kw: calls.append(name) or None
+        try:
+            self.assertIsNotNone(cc.map_dot_latlon("Shanghai", None, None))
+            self.assertEqual(calls, [])   # no geocode call for a fixed-pixel city
+        finally:
+            cc.geocode_city = orig
+
+    def test_non_override_ungeocodable_still_none(self):
+        orig = cc.geocode_city
+        cc.geocode_city = lambda name, **kw: None
+        try:
+            self.assertIsNone(cc.map_dot_latlon("Tatooine", None, None))
+        finally:
+            cc.geocode_city = orig
+
+    def test_explicit_latlon_wins_even_for_override_city(self):
+        # Passing both coords short-circuits to resolve_latlon (no network), so the
+        # user's values flow through unchanged (project_city still ignores them).
+        self.assertEqual(cc.map_dot_latlon("Shanghai", 31.23, 121.47), (31.23, 121.47))
 
 
 class _FakeResp:

@@ -215,8 +215,12 @@ def lat2y(lat):
 # are dragged WEST to nearly Tokyo's x, so a separable lon/lat projection can't
 # place East-Asia/Oceania. (Tokyo itself IS placed correctly by the linear
 # formula and needs no override — it's only the landmark showing how far west the
-# others land.) Keep a per-city pixel override table for the cities that need it.
-PIXEL_OVERRIDES = {"Seoul": (822, 305), "Sydney": (870, 512), "Melbourne": (836, 543)}
+# others land.) Separately, Shanghai (~121°E) IS placed almost correctly by the
+# linear formula but lands ~8px offshore; its override only nudges it west onto the
+# Chinese coast — a small cosmetic fix, not the gross Oceania distortion above.
+# Keep a per-city pixel override table for the cities that need it.
+PIXEL_OVERRIDES = {"Seoul": (822, 305), "Sydney": (870, 512), "Melbourne": (836, 543),
+                   "Shanghai": (833, 330)}
 
 def project_city(name, lat, lon):
     """Map a city to (x, y) pixels on image18.png. Overridden cities take their
@@ -337,6 +341,16 @@ def resolve_latlon(name, lat, lon):
         print("WARNING: --lat and --lon must be given together; ignoring the lone "
               "value and geocoding %r instead." % name)
     return geocode_city(name)
+
+def map_dot_latlon(name, lat, lon):
+    """Coordinates to feed the slide-5 map-dot placement, or None to leave the dot
+    at San Francisco. Fixed-pixel-override cities are placed by NAME (project_city
+    ignores lat/lon for them), so they're placeable WITHOUT geocoding: return a
+    sentinel instead of gating them on a network lookup that can't change where the
+    dot lands. Explicit --lat/--lon still short-circuit to resolve_latlon."""
+    if name in PIXEL_OVERRIDES and not (lat is not None and lon is not None):
+        return (0.0, 0.0)   # value unused by project_city; just marks the dot placeable
+    return resolve_latlon(name, lat, lon)
 
 # ----------------------------------------------------------------------------
 # Drive helpers (via the gws CLI)
@@ -478,11 +492,20 @@ def main():
     print("Upper: %s" % upper)
     print("Slug : aaif-%s  ->  https://luma.com/aaif-%s" % (slug, slug))
 
-    # Coordinates for the slide-5 network-map dot (override -> geocode -> none).
-    latlon = resolve_latlon(name, a.lat, a.lon)
-    if latlon:
+    # Coordinates for the slide-5 network-map dot (explicit -> pixel-override
+    # sentinel -> geocode -> none). Fixed-pixel cities place by name, so they never
+    # get the "stays at San Francisco" warning just because geocoding was skipped.
+    pixel_override = name in PIXEL_OVERRIDES
+    latlon = map_dot_latlon(name, a.lat, a.lon)
+    if pixel_override and not (a.lat is not None and a.lon is not None):
+        print("Coords: -- (fixed pixel override for %s; lat/lon not needed)" % name)
+    elif latlon:
         src = "override" if (a.lat is not None and a.lon is not None) else "geocoded"
         print("Coords: %.4f, %.4f (%s)" % (latlon[0], latlon[1], src))
+        if pixel_override:
+            print("Note: %s has a fixed pixel override for the slide-5 map dot; the "
+                  "coordinates above do NOT position it (--lat/--lon ignored for "
+                  "placement)." % name)
     else:
         print("Coords: --")
         print("WARNING: could not resolve coordinates for %r; the slide-5 map dot "
