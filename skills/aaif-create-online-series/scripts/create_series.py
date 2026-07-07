@@ -193,7 +193,9 @@ def gws_json(*args, params=None, body=None):
     if body is not None:
         cmd += ["--json", json.dumps(body)]
     out = _gws(cmd)
-    s = "\n".join(l for l in out.splitlines() if "keyring backend" not in l).strip()
+    # Split on "\n" only — NOT splitlines(), which also splits on U+2028 and
+    # friends INSIDE JSON string values, corrupting them when rejoined.
+    s = "\n".join(l for l in out.split("\n") if "keyring backend" not in l).strip()
     if not s:
         # Empty-but-successful stdout would silently become {} -> an empty file
         # list -> a subtree that fails to clone while the run still says "Done".

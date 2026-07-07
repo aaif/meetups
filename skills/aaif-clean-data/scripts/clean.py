@@ -80,9 +80,16 @@ GREEN  = {"red": 0.72, "green": 0.88, "blue": 0.70}   # existing form city
 # used to install them.
 VIOLET_FORMULA = '=$A2="Existing (from MLOps)"'
 AMBER_FORMULA = f'=${colletter(CITY_NEW_COL)}2<>""'
+# "Real city" = non-empty and not ANY "Other..." placeholder — the form has both
+# "Other" and "Other (PLEASE TELL US WHERE IN NEXT QUESTION)", so match the prefix.
 GREEN_FORMULA = (f'=AND(${colletter(CITY_EXISTING_COL)}2<>"",'
-                 f'${colletter(CITY_EXISTING_COL)}2<>"Other")')
+                 f'LEFT(${colletter(CITY_EXISTING_COL)}2,5)<>"Other")')
 COLOR_FORMULAS = {VIOLET_FORMULA, AMBER_FORMULA, GREEN_FORMULA}
+# Formulas earlier releases installed: matched as stale so a refresh REPLACES
+# them instead of stacking a duplicate rule next to the old one.
+LEGACY_COLOR_FORMULAS = {(f'=AND(${colletter(CITY_EXISTING_COL)}2<>"",'
+                          f'${colletter(CITY_EXISTING_COL)}2<>"Other")')}
+STALE_COLOR_FORMULAS = COLOR_FORMULAS | LEGACY_COLOR_FORMULAS
 # The two source-column headers we expect at G/H before (or after) labeling.
 CITY_SRC_HEADERS = ({"City", "City (Existing)"}, {"Resolved City", "City (New)"})
 
@@ -113,7 +120,7 @@ def color_rule_plan(cfs):
     rule so it keeps top priority — computed from the red rule's ACTUAL position
     (not assumed to be index 0), adjusted for the stale rules deleted above it,
     since deletes and adds run in one batch. Testable without touching Sheets."""
-    stale = [i for i, cf in enumerate(cfs) if formula_of(cf) in COLOR_FORMULAS]
+    stale = [i for i, cf in enumerate(cfs) if formula_of(cf) in STALE_COLOR_FORMULAS]
     red = next((i for i, cf in enumerate(cfs) if _is_red(cf)), None)
     if red is None:
         base = 0
@@ -221,7 +228,9 @@ def scan():
         if link and "linkedin.com/" not in link:
             flags.append({"row": rn, "who": who, "issue": f"LinkedIn not a profile URL: {row[li].strip()}"})
         resolved = (row[ri].strip() if ri is not None and ri < len(row) else "")
-        if city.lower() == "other" and not resolved:
+        # The form has two placeholders: "Other" and "Other (PLEASE TELL US
+        # WHERE IN NEXT QUESTION)" — match the prefix, not the exact string.
+        if city.lower().startswith("other") and not resolved:
             flags.append({"row": rn, "who": who, "issue": "city=Other (resolve into 'City (New)' from their text)"})
         if email:
             seen_email.setdefault(email, []).append(rn)

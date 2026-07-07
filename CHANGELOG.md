@@ -4,6 +4,54 @@ All notable changes to the **AAIF Meetups Toolkit** plugin are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 plugin version is the `version` field in `.claude-plugin/plugin.json`.
 
+## [0.4.0]
+
+### Added
+- **Luma API integration** (`lib/aaif_meetups/luma.py`): stdlib client for the
+  Luma public API (`public-api.luma.com`, per-calendar key from `LUMA_API_KEY`
+  or the `luma-api-key` keychain item; Luma Plus required) with pure, unit-tested
+  payload builders. All live writes sit behind explicit `--create`/`--apply`
+  flags that the agent only runs after the user approves the printed proposal.
+  Every script detects whether Luma is connected: when no key is configured it
+  degrades gracefully — the push prints the proposal as manual-creation details,
+  the sync prints the desired values as a manual checklist, and the stats step
+  is skipped with a note — instead of erroring.
+- `aaif-create-event` → `scripts/luma_push.py`: create the live Luma event page
+  from the tracker entry — times from DATE & TIME + IANA timezone, venue as a
+  manual address, capacity, description markdown (from `aaif-luma-description`),
+  banner PNG uploaded as the cover, hosts (manager / check-in) — then write the
+  event URL back into the tracker's LUMA URL field. Aborts if already pushed.
+- `aaif-update-event` → `scripts/luma_sync.py`: field-by-field diff of the
+  tracker vs the live event; `--apply` pushes only the changed fields
+  (`--quiet` suppresses Luma's guest notifications) and re-verifies.
+  Cancellation deliberately not automated.
+- `aaif-event-status` → `scripts/luma_stats.py`: read-only guest counts
+  (going / pending / waitlist / invited / declined / checked-in) and
+  registration state for pushed events; feeds day-of slides and recap numbers.
+  Luma data is never written back into the Intake Ops sheet.
+
+## [0.3.0]
+
+### Added
+- `aaif-sync-chapters` skill — sync organizer decisions from the **Intake Ops**
+  sheet into the **Chapters List**: merge `Accepted` / `Existing (from MLOps)`
+  organizers into each city row's Organizers column and append rows for net-new
+  cities (with their Luma link). Report-and-propose by default, one atomic
+  `batchUpdate` on approval, idempotent, with unresolved-city and near-miss-city
+  guardrails. Unit tests for the pure merge/slug/near-miss logic.
+
+### Fixed
+- `gws` JSON parsing (`gws_json` in the sync, create-chapter, and
+  create-online-series engines) now splits output on `\n` only — Python's
+  `splitlines()` also splits on U+2028 (line separator) *inside* string values,
+  which corrupted the JSON when rejoined (hit by a real intake row).
+- `aaif-clean-data` treats **any** `Other…` city placeholder as unresolved — the
+  form emits both `Other` and `Other (PLEASE TELL US WHERE IN NEXT QUESTION)`,
+  and the exact-string match left long-variant rows unflagged (24 on live data)
+  and wrongly painted their `City (Existing)` green. The green rule now checks
+  the `Other` prefix; retired formulas are tracked in `LEGACY_COLOR_FORMULAS` so
+  `install-colors` replaces old rules instead of stacking duplicates.
+
 ## [0.2.0]
 
 ### Added

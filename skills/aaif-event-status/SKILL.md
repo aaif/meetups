@@ -1,6 +1,6 @@
 ---
 name: aaif-event-status
-description: Report task status for an AAIF chapter or online series — which event tasks are overdue or due soon, grouped by owner, read from the Event Tracker.docx. Use when asked for the status / health / what's-due of a chapter or series' events.
+description: Report task status for an AAIF chapter or online series — which event tasks are overdue or due soon, grouped by owner, read from the Event Tracker.docx — plus read-only Luma registration stats (going/waitlist/checked-in counts) for pushed events. Use when asked for the status / health / what's-due / RSVP numbers of a chapter or series' events.
 argument-hint: '<chapter|series> [event]'
 ---
 
@@ -41,3 +41,23 @@ deterministic parsing of a local file.** Prereq: `gws` installed and authenticat
 
 Status is computed against today from each task's DUE cell; clock-time day-of tasks and
 `Done` tasks are excluded. Nothing is written back — this skill only reads.
+
+## Luma registration stats (read-only)
+
+For events whose tracker LUMA URL holds their event page (written by
+`aaif-create-event`'s Luma push), pull the live guest counts — going, pending,
+waitlist, invited, declined, checked-in — plus registration state:
+
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/luma_stats.py tracker.docx ["event"]
+python3 ${CLAUDE_SKILL_DIR}/scripts/luma_stats.py --url https://luma.com/EVENT_SLUG
+```
+
+The script detects whether Luma is connected (that calendar's API key in
+`LUMA_API_KEY` or keychain item `luma-api-key`; see `aaif-create-event` for
+setup); when it isn't, it skips the stats with a note — the task digest above
+still works, and the user can read the numbers off the event page manually.
+This is strictly read-only —
+it never writes to Luma, the tracker, or any sheet, and Luma data is never fed
+back into the Intake Ops sheet. Use the numbers for the day-of slides
+(`aaif-dayof-slides`) and the recap post (`aaif-recap-post`).
