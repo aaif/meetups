@@ -33,6 +33,9 @@ def find_event_id(view, override):
     except luma.NotAnEventUrl:
         sys.exit("ABORT: LUMA URL doesn't point to an event page (%r) — likely the "
                  "chapter calendar link. Pass --event-id or the event's own URL." % cell)
+    except luma.LumaError as e:
+        sys.exit("ABORT: couldn't resolve the LUMA URL %r (%s). Retry, or pass "
+                 "--event-id." % (cell, e))
 
 
 def fmt(v):

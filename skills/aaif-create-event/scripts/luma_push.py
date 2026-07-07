@@ -6,7 +6,9 @@ gws; the Luma API key is per-calendar, so events land on that chapter/series
 calendar (see the SKILL.md for key setup).
 
 Without --create: prints the full events/create payload, the hosts to add, and
-which account/calendar the API key belongs to. Nothing is sent.
+which account/calendar the API key belongs to. No live writes are sent (when
+connected, the dry-run still makes read-only calls: the LUMA URL entity lookup
+and get_calendar).
 
 With --create: uploads the cover (if given), creates the event, adds hosts,
 writes the event URL into the tracker's LUMA URL field (local file — re-upload
@@ -27,8 +29,8 @@ def parse_host(spec):
     email, level, name = parts[0].strip(), None, None
     for p in parts[1:]:
         p = p.strip()
-        if p in ("manager", "check-in"):
-            level = p
+        if p.lower() in ("manager", "check-in"):
+            level = p.lower()
         elif p:
             name = p
     if "@" not in email:
@@ -36,13 +38,14 @@ def parse_host(spec):
     return email, level, name
 
 
-def already_pushed(view, connected=False):
+def already_pushed(view, *, connected=False):
     """The LUMA URL cell holds an event page link (not the chapter calendar link).
 
     The template pre-fills the chapter calendar link (an aaif- slug), but event
     pages may use aaif- slugs too (--slug aaif-sf-evalnight). When connected,
-    the entity lookup decides; offline, fall back to the slug heuristic — safe,
-    because --create requires the key and so always takes the lookup path.
+    the entity lookup decides — and a failed lookup raises LumaError rather than
+    guessing, so --create can't proceed on an unverified URL. Offline (no key),
+    the slug heuristic decides; safe, because --create requires the key.
     """
     cell = (view["details"].get("LUMA URL") or "").strip()
     if not cell or not ("luma.com/" in cell.lower() or "lu.ma/" in cell.lower()):
@@ -53,8 +56,6 @@ def already_pushed(view, connected=False):
             return cell
         except luma.NotAnEventUrl:
             return None
-        except luma.LumaError:
-            pass   # lookup unreachable — fall back to the heuristic
     return None if "aaif-" in cell.lower() else cell
 
 
@@ -104,7 +105,14 @@ def main():
     hosts = [parse_host(h) for h in a.host]
 
     key_ok = luma.available()
-    pushed = already_pushed(view, connected=key_ok)
+    try:
+        pushed = already_pushed(view, connected=key_ok)
+    except luma.LumaError as e:
+        if not a.force:
+            sys.exit("ABORT: couldn't verify whether the LUMA URL is already an event "
+                     "page (%s). Retry, or pass --force to skip the check." % e)
+        pushed = None
+        print("WARNING: couldn't verify the LUMA URL (%s) — continuing due to --force." % e)
     if pushed and not a.force:
         sys.exit("ABORT: this event's LUMA URL is already %r — it looks pushed. "
                  "Use aaif-update-event to change it, or --force to create anyway." % pushed)
@@ -112,8 +120,8 @@ def main():
     show_proposal(payload, hosts, a.cover, key_ok)
     if not a.create:
         if key_ok:
-            print("\n[dry-run] Nothing sent. Review with the user; re-run with --create "
-                  "ONLY after they explicitly approve this proposal.")
+            print("\n[dry-run] No live writes sent. Review with the user; re-run with "
+                  "--create ONLY after they explicitly approve this proposal.")
         else:
             print("\n[dry-run] Luma is NOT connected (no API key for this calendar). "
                   "SKIP the automated push: ask the user to create the event manually "
@@ -128,10 +136,19 @@ def main():
     if a.cover:
         payload["cover_url"] = luma.upload_image(a.cover)
         print("  cover uploaded: %s" % payload["cover_url"])
-    event_id = luma.create_event(payload)["id"]
-    live = luma.get_event(event_id)
-    url = live.get("url") or ("https://luma.com/" + (a.slug or event_id))
-    print("  created: %s (%s)" % (url, event_id))
+    res = luma.create_event(payload)
+    event_id = res.get("id") or res.get("api_id")   # same variance resolve_event_id handles
+    if not event_id:
+        sys.exit("Event was likely created, but the response had no id (keys: %s) — "
+                 "check the calendar, then record the page URL in the tracker's "
+                 "LUMA URL field manually." % ", ".join(sorted(res)))
+    try:
+        live = luma.get_event(event_id)
+    except luma.LumaError as e:
+        live = {}
+        print("  !! created %s but couldn't re-fetch it: %s" % (event_id, e))
+    url = live.get("url") or res.get("url")
+    print("  created: %s (%s)" % (url or "(no url in response)", event_id))
 
     failed = []
     for email, level, name in hosts:
@@ -142,9 +159,14 @@ def main():
             failed.append((email, str(e)))
             print("  !! host FAILED: %s — %s" % (email, e))
 
-    tracker.set_field(root, a.event, "LUMA URL", url)
-    office.save_document(a.docx, root, a.docx)
-    print("  tracker LUMA URL set in %s — re-upload it to Drive via gws." % a.docx)
+    if url:
+        tracker.set_field(root, a.event, "LUMA URL", url)
+        office.save_document(a.docx, root, a.docx)
+        print("  tracker LUMA URL set in %s — re-upload it to Drive via gws." % a.docx)
+    else:
+        # never write a guessed URL — it would poison later sync/stats resolution
+        print("  !! no event URL in the API response — open the calendar, find the "
+              "event, and record its page URL in the tracker's LUMA URL field manually.")
     if failed:
         sys.exit("Event created, but %d host(s) failed — add them on the Luma page "
                  "or re-run add-host." % len(failed))

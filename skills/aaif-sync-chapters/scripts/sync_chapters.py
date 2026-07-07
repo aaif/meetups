@@ -38,12 +38,12 @@ _TRANSIENT = ("timed out", "internalError", "HTTP request failed",
               "backendError", "503", "500", "502")
 
 def _gws(cmd, retries=5):
-    for i in range(retries):
+    for i in range(max(1, retries)):   # retries<=0 must raise below, not return None
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode == 0:
             return r.stdout
         msg = (r.stderr or "") + (r.stdout or "")
-        if i < retries - 1 and any(k in msg for k in _TRANSIENT):
+        if i < max(1, retries) - 1 and any(k in msg for k in _TRANSIENT):
             time.sleep(2 * (i + 1))
             continue
         raise RuntimeError("gws failed (%s): %s" % (r.returncode, msg.strip()[:400]))
@@ -104,7 +104,7 @@ def luma_status(slug):
             return "live" if r.status == 200 else "unknown"
     except urllib.error.HTTPError as e:
         return "absent" if e.code == 404 else "unknown"
-    except Exception:
+    except (urllib.error.URLError, TimeoutError):
         return "unknown"
 
 # ----------------------------------------------------------------------------
@@ -283,10 +283,12 @@ def apply_changes(adds, new_rows):
               "values": [[n["city"], "; ".join(n["names"]), "",
                           "https://luma.com/aaif-" + n["slug"]]]}
              for n in new_rows]
-    # One batchUpdate for everything, so a partial failure can't half-sync the sheet.
+    # One batchUpdate for everything, so a partial failure can't half-sync the
+    # sheet. RAW, not USER_ENTERED: a name starting with = + - @ must stay text,
+    # never become a formula.
     gws_json("sheets", "spreadsheets", "values", "batchUpdate",
              params={"spreadsheetId": CHAPTERS_ID},
-             body={"valueInputOption": "USER_ENTERED", "data": data})
+             body={"valueInputOption": "RAW", "data": data})
     return len(data)
 
 def main():

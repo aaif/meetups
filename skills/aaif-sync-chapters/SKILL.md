@@ -73,8 +73,8 @@ Prereq: the `gws` CLI must be installed and authenticated (see the user's
 
 After any run (and after editing the engine):
 
-- The report's intake counts should match the sheet's Status column (today:
-  23 `Existing (from MLOps)` + 6 `Accepted`); a delta means status strings drifted.
+- The report's intake counts should match a manual count of the sheet's Status
+  column; a delta means status strings drifted.
 - After `--write`, the built-in re-verify must print
   "Verified: a fresh run proposes zero changes."
 - Spot-check one touched row in the sheet: B merged correctly, C and D untouched,
@@ -87,8 +87,8 @@ After any run (and after editing the engine):
 ## Notes
 
 - Both tabs are read by **header name** (`Status`, `Full name`, `City (Existing)`,
-  `City (New)`, `City`, `Organizers`), never by fixed column letter — the script
-  aborts loudly if a header disappears.
+  `City (New)`, `Run events before?`, `Why organize / ties`, `City`, `Organizers`),
+  never by fixed column letter — the script aborts loudly if a header disappears.
 - Quote the tab name in any manual A1 ranges (`'Chapters & Teams'!B11`) — it
   contains `&` and spaces.
 - Unresolved rows already hand-placed on the chapters list are flagged

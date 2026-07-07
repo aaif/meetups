@@ -17,14 +17,18 @@ COUNT_KEYS = ("approved", "pending_approval", "waitlist", "invited", "declined",
 
 
 def print_stats(live, label=None):
-    counts = live.get("guest_counts") or {}
-    going = (counts.get("approved") or {}).get("guests", 0)
+    counts = live.get("guest_counts")
     print("== %s ==" % (label or live.get("name", "?")))
     print("  %s  ·  starts %s (%s)" % (live.get("url", "?"),
                                        live.get("start_at", "?"), live.get("timezone", "?")))
     print("  registration: %s  ·  waitlist: %s"
           % ("OPEN" if live.get("registration_open") else "closed",
              live.get("waitlist_status", "?")))
+    if counts is None:
+        # absent != zero RSVPs — don't print a fake 0
+        print("  (no guest counts in the API response)")
+        return
+    going = (counts.get("approved") or {}).get("guests", 0)
     print("  going: %d   %s" % (going, "   ".join(
         "%s: %d" % (k.replace("_", "-"), (counts.get(k) or {}).get("guests", 0))
         for k in COUNT_KEYS if k != "approved")))
@@ -35,7 +39,7 @@ def stats_for_tracker(docx, event_filter):
     refs = tracker.list_events(root)
     if event_filter:
         refs = [e for e in refs if event_filter.lower() in e["title"].lower()]
-    shown = 0
+    shown, errors = 0, 0
     for ref in refs:
         view = tracker.view_event(ref)
         cell = (view["details"].get("LUMA URL") or "").strip()
@@ -53,12 +57,15 @@ def stats_for_tracker(docx, event_filter):
             continue
         except luma.LumaError as e:
             print("== %s ==\n  !! %s" % (view["title"], e))
+            errors += 1
             continue
         print_stats(live, label=view["title"])
         shown += 1
     if not refs:
         print("No matching events in %s." % docx)
-    return shown
+    if errors:
+        print("!! %d event(s) errored — stats above are incomplete." % errors)
+    return shown, errors
 
 
 def main():
@@ -80,7 +87,9 @@ def main():
     elif a.url:
         print_stats(luma.get_event(luma.resolve_event_id(a.url)))
     elif a.docx:
-        stats_for_tracker(a.docx, a.event)
+        _, errors = stats_for_tracker(a.docx, a.event)
+        if errors:
+            sys.exit(1)   # partial digest — don't let the caller read it as complete
     else:
         ap.error("pass a tracker.docx, --url, or --event-id")
 

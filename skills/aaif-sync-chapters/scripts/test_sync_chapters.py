@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Unit tests for the pure logic in sync_chapters.py (no network/gws)."""
 import sys, os
+from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import sync_chapters
 from sync_chapters import fold, slugify, parse_organizers, build_proposal
 
 def chap(row, city, orgs):
@@ -77,6 +79,28 @@ check("new rows numbered from last+1",
 adds, _, _ = build_proposal([entry(2, "A B", "Delhi NCR")],
                             [chap(2, "Delhi NCR", "")], 2)
 check("empty B populated", adds[0]["new_value"], "A B")
+
+# --- apply_changes: exact ranges, column order, RAW (gws mocked, no network) -----
+with mock.patch.object(sync_chapters, "gws_json") as gj:
+    n = sync_chapters.apply_changes(
+        [{"row": 2, "city": "Boston", "names": ["New Person"],
+          "new_value": "Kranthi Manchikanti; New Person"}],
+        [{"row": 6, "city": "Pune", "names": ["Imran Bagwan"], "slug": "pune"}])
+    body = gj.call_args.kwargs["body"]
+check("apply_changes writes both changes", n, 2)
+check("apply_changes uses RAW (no formula injection)", body["valueInputOption"], "RAW")
+check("apply_changes ranges and column order", body["data"],
+      [{"range": "'%s'!B2" % sync_chapters.CHAPTERS_TAB,
+        "values": [["Kranthi Manchikanti; New Person"]]},
+       {"range": "'%s'!A6:D6" % sync_chapters.CHAPTERS_TAB,
+        "values": [["Pune", "Imran Bagwan", "", "https://luma.com/aaif-pune"]]}])
+
+# --- gws_json survives U+2028 inside JSON string values (the splitlines() bug) ---
+raw = '{"a": "line1\u2028line2"}\n'
+with mock.patch.object(sync_chapters.subprocess, "run",
+                       return_value=mock.Mock(returncode=0, stdout=raw)):
+    check("gws_json keeps U+2028 inside values", sync_chapters.gws_json("sheets", "get"),
+          {"a": "line1\u2028line2"})
 
 print()
 sys.exit("FAIL: %d test(s) failed" % fails if fails else None)

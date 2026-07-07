@@ -21,6 +21,12 @@ class TestParseHost(unittest.TestCase):
         self.assertEqual(luma_push.parse_host("a@b.co:Maya Chen"),
                          ("a@b.co", None, "Maya Chen"))
 
+    def test_levels_match_case_insensitively(self):
+        # "Check-In" must not silently become a display name with manager access
+        self.assertEqual(luma_push.parse_host("a@b.co:Check-In"), ("a@b.co", "check-in", None))
+        self.assertEqual(luma_push.parse_host("a@b.co:MANAGER:Maya Chen"),
+                         ("a@b.co", "manager", "Maya Chen"))
+
     def test_rejects_non_email(self):
         with self.assertRaises(ValueError):
             luma_push.parse_host("not-an-email")
@@ -52,6 +58,15 @@ class TestAlreadyPushed(unittest.TestCase):
                                side_effect=luma_push.luma.NotAnEventUrl("calendar")):
             self.assertIsNone(luma_push.already_pushed(view("luma.com/aaif-sanfrancisco"),
                                                        connected=True))
+
+    def test_connected_lookup_failure_raises_not_guesses(self):
+        # fail closed: an inconclusive lookup must surface, never silently fall
+        # back to the slug heuristic right before a live --create
+        with mock.patch.object(luma_push.luma, "resolve_event_id",
+                               side_effect=luma_push.luma.LumaError("HTTP 500")):
+            with self.assertRaises(luma_push.luma.LumaError):
+                luma_push.already_pushed(view("https://luma.com/aaif-sf-evalnight"),
+                                         connected=True)
 
 
 if __name__ == "__main__":

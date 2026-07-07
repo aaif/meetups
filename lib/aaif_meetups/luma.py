@@ -17,6 +17,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -33,7 +34,7 @@ _IMAGE_MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 
 
 class LumaError(RuntimeError):
-    pass
+    status = None   # HTTP status when the API answered; None for network failures
 
 
 class NotAnEventUrl(LumaError):
@@ -55,10 +56,18 @@ def api_key():
         r = None
     if r is not None and r.returncode == 0 and r.stdout.strip():
         return r.stdout.strip()
+    hint = ""
+    if r is not None and r.returncode != 0:
+        err = (r.stderr or "").strip()
+        # item-not-found is the normal "no key stored" case; anything else
+        # (locked keychain, denied ACL) must not masquerade as "no key"
+        if err and "could not be found" not in err:
+            hint = "\nKeychain lookup failed (not just missing): %s" % err.splitlines()[-1]
     raise LumaError(
         "No Luma API key found. Create one in the calendar's settings (Luma Plus, "
         "keys are per-calendar), then either export LUMA_API_KEY or store it with:\n"
-        "  security add-generic-password -s %s -a aaif -w THE_KEY" % KEYCHAIN_SERVICE)
+        "  security add-generic-password -s %s -a aaif -w THE_KEY%s"
+        % (KEYCHAIN_SERVICE, hint))
 
 
 def available():
@@ -73,12 +82,19 @@ def available():
 
 
 def call(method, path, params=None, body=None, retries=4):
-    """One API call, retrying transient HTTP/network errors with backoff."""
+    """One API call. GETs retry transient HTTP/network errors with backoff;
+    writes (POST) are never blind-retried — a timed-out create/update may have
+    gone through on the server, so a retry could duplicate the event or
+    double-send guest notifications — except on 429, which Luma sends before
+    doing any work."""
     url = BASE + path + ("?" + urllib.parse.urlencode(params) if params else "")
     data = json.dumps(body).encode("utf-8") if body is not None else None
     headers = {"x-luma-api-key": api_key(), "accept": "application/json"}
     if data is not None:
         headers["content-type"] = "application/json"
+    write_hint = ("" if method == "GET" else
+                  " — the write may still have gone through; check Luma before retrying")
+    retries = max(1, retries)
     for i in range(retries):
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
         try:
@@ -86,15 +102,27 @@ def call(method, path, params=None, body=None, retries=4):
                 return json.loads(r.read().decode("utf-8") or "{}")
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", errors="replace")[:300]
-            if e.code in _TRANSIENT_HTTP and i < retries - 1:
+            retryable = e.code == 429 or (method == "GET" and e.code in _TRANSIENT_HTTP)
+            if retryable and i < retries - 1:
+                print("luma: HTTP %d on %s %s — retry %d/%d in %ds"
+                      % (e.code, method, path, i + 1, retries - 1, 2 * (i + 1)),
+                      file=sys.stderr)
                 time.sleep(2 * (i + 1))
                 continue
-            raise LumaError("%s %s -> HTTP %d: %s" % (method, path, e.code, detail))
+            err = LumaError("%s %s -> HTTP %d: %s%s"
+                            % (method, path, e.code, detail,
+                               write_hint if e.code in _TRANSIENT_HTTP and e.code != 429
+                               else ""))
+            err.status = e.code
+            raise err
         except (urllib.error.URLError, TimeoutError) as e:
-            if i < retries - 1:
+            if method == "GET" and i < retries - 1:
+                print("luma: %s %s unreachable — retry %d/%d in %ds"
+                      % (method, path, i + 1, retries - 1, 2 * (i + 1)), file=sys.stderr)
                 time.sleep(2 * (i + 1))
                 continue
-            raise LumaError("Luma unreachable (%s %s): %s" % (method, path, e))
+            raise LumaError("Luma unreachable (%s %s): %s%s"
+                            % (method, path, e, write_hint))
 
 
 # ---------------------------------------------------------------------------
@@ -146,9 +174,12 @@ def upload_image(path):
     # The upload URL is pre-signed — no API key header, plain PUT of the bytes.
     req = urllib.request.Request(res["upload_url"], data=data, method="PUT",
                                  headers={"content-type": mime})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        if r.status not in (200, 201, 204):
-            raise LumaError("image upload failed: HTTP %d" % r.status)
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            if r.status not in (200, 201, 204):
+                raise LumaError("image upload failed: HTTP %d" % r.status)
+    except (urllib.error.URLError, TimeoutError) as e:   # HTTPError included
+        raise LumaError("image upload failed: %s" % e)
     return res["file_url"]
 
 
@@ -171,7 +202,7 @@ def resolve_event_id(url_or_slug):
 # ---------------------------------------------------------------------------
 # Pure payload builders (no network)
 # ---------------------------------------------------------------------------
-_TIME_RE = re.compile(r"\b(\d{1,2}):(\d{2})\b")
+_TIME_RE = re.compile(r"\b(\d{1,2}):(\d{2})(?:\s*([ap])\.?m\.?)?", re.I)
 _URL_RE = re.compile(r"https?://\S+|(?:www\.|lu\.ma/|luma\.com/)\S+", re.I)
 
 
@@ -182,22 +213,36 @@ def slug_of_url(url_or_slug):
     return s.rsplit("/", 1)[-1].split("?")[0]
 
 
+def _hour24(h, m, ampm):
+    """(hour, minute) from a _TIME_RE match; honors an AM/PM marker if present."""
+    h = int(h)
+    if ampm:
+        if ampm.lower() == "p" and h != 12:
+            h += 12
+        elif ampm.lower() == "a" and h == 12:
+            h = 0
+    return h, int(m)
+
+
 def event_times(date_text, tz_name, duration_hours=3.0):
     """DATE & TIME cell -> (start, end) timezone-aware datetimes.
 
     The date comes from tracker.parse_event_date (requires a 4-digit year); the
     start time is the first HH:MM in the text — required, so a placeholder cell
-    can't silently become a midnight event. A second HH:MM ("17:30 — 20:30") is
-    the end time; otherwise end = start + duration_hours ("18:00 — late").
+    can't silently become a midnight event. An AM/PM marker is honored ("6:00 PM"
+    is 18:00, not 06:00). A second HH:MM ("17:30 — 20:30") is the end time;
+    otherwise end = start + duration_hours ("18:00 — late").
     """
     d = tracker.parse_event_date(date_text)
     tz = ZoneInfo(tz_name)
     times = _TIME_RE.findall(date_text)
     if not times:
         raise ValueError("no HH:MM start time in DATE & TIME: %r" % date_text)
-    start = dt.datetime(d.year, d.month, d.day, int(times[0][0]), int(times[0][1]), tzinfo=tz)
+    h, m = _hour24(*times[0])
+    start = dt.datetime(d.year, d.month, d.day, h, m, tzinfo=tz)
     if len(times) > 1:
-        end = dt.datetime(d.year, d.month, d.day, int(times[1][0]), int(times[1][1]), tzinfo=tz)
+        h, m = _hour24(*times[1])
+        end = dt.datetime(d.year, d.month, d.day, h, m, tzinfo=tz)
         if end <= start:   # "21:00 — 00:30" crosses midnight
             end += dt.timedelta(days=1)
     else:
@@ -220,6 +265,9 @@ def event_payload(view, tz_name, duration_hours=3.0, description_md=None,
     view_event dict). In-person trackers map VENUE + LOCATION / CITY to a manual
     address; series trackers map STREAM / JOIN LINK to meeting_url. Placeholder
     text flows through as-is — the proposal is reviewed by a human before create.
+
+    Consumes only view["details"], reading these labels: EVENT TITLE,
+    DATE & TIME, VENUE, LOCATION / CITY, STREAM / JOIN LINK, CAPACITY / RSVPS.
     """
     det = view["details"]
     name = (det.get("EVENT TITLE") or "").strip()
