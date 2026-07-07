@@ -41,9 +41,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-      - run: pip install pytest
+      - run: python -m pip install pytest
       - name: Library unit tests
+        # PYTHONPATH=lib puts the aaif_events package on sys.path explicitly, so
+        # `from aaif_events import ...` resolves deterministically (not just via
+        # pytest's rootdir insertion).
         run: python -m pytest lib/aaif_events/tests -q
+        env:
+          PYTHONPATH: lib
       - name: Skill script tests
         run: |
           for t in skills/*/scripts/test_*.py; do
