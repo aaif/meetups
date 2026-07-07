@@ -5,7 +5,7 @@ import datetime as dt
 import re
 from dataclasses import dataclass
 
-from aaif_meetups import office
+from aaif_events import office
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,7 @@
 # Contributing
 
-Thanks for helping improve the AAIF Meetups Toolkit. The repo root is both the
-marketplace and a single plugin (`aaif-meetups`) — `marketplace.json` and
+Thanks for helping improve the AAIF Community Events Toolkit. The repo root is both the
+marketplace and a single plugin (`aaif-events`) — `marketplace.json` and
 `plugin.json` sit side by side in `.claude-plugin/`, and the skills live under
 `skills/` at the repo root.
 
@@ -74,7 +74,7 @@ Finally, install your local copy to try it live:
 
 ```bash
 /plugin marketplace add ./           # from the repo root
-/plugin install aaif-meetups@aaif
+/plugin install aaif-events@aaif
 ```
 
 ## Pull requests

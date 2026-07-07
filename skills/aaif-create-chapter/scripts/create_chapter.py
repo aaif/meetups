@@ -300,7 +300,7 @@ def geocode_city(name, retries=3):
     url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(
         {"q": name, "format": "json", "limit": 1})
     req = urllib.request.Request(url, headers={   # Nominatim requires a UA
-        "User-Agent": "aaif-create-chapter/1.0 (AAIF chapter cloner; +https://github.com/aaif/meetups)"})
+        "User-Agent": "aaif-create-chapter/1.0 (AAIF chapter cloner; +https://github.com/aaif/events)"})
     for i in range(retries):
         try:
             with urllib.request.urlopen(req, timeout=15) as r:

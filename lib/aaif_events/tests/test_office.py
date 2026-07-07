@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from aaif_meetups import office
+from aaif_events import office
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures", "event_tracker_irl.docx")
 

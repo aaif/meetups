@@ -5,14 +5,14 @@
     "name": "AAIF",
     "url": "https://github.com/aaif"
   },
-  "description": "Official marketplace for AAIF (Agentic AI Foundation) community meetup tooling.",
+  "description": "Official marketplace for AAIF (Agentic AI Foundation) community event tooling.",
   "plugins": [
     {
-      "name": "aaif-meetups",
+      "name": "aaif-events",
       "source": "./",
-      "description": "Skills for running AAIF in-person and online meetups: event content writing and chapter/series/community ops.",
+      "description": "Skills for running AAIF in-person and online events: event content writing and chapter/series/community ops.",
       "category": "community",
-      "tags": ["meetups", "events", "community", "content", "google-workspace", "online"]
+      "tags": ["events", "community", "content", "google-workspace", "online"]
     }
   ]
 }

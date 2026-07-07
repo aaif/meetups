@@ -4,7 +4,7 @@ import unittest
 import urllib.error
 from unittest import mock
 
-from aaif_meetups import luma
+from aaif_events import luma
 
 
 def view(**details):

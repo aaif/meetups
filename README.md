@@ -1,7 +1,7 @@
-# AAIF Meetups Toolkit
+# AAIF Community Events Toolkit
 
 Agent Skills for running **AAIF (Agentic AI Foundation)** in‑person and online
-meetups — from writing the LinkedIn announcement to spinning up a brand‑new city
+events — from writing the LinkedIn announcement to spinning up a brand‑new city
 chapter or online event series.
 
 Packaged as a **Claude Code plugin** (and a one‑plugin marketplace) so any
@@ -14,30 +14,30 @@ also work in claude.ai and the Claude Agent SDK — see [Using in other tools](#
 ## Install (Claude Code)
 
 ```bash
-/plugin marketplace add aaif/meetups
-/plugin install aaif-meetups@aaif
+/plugin marketplace add aaif/events
+/plugin install aaif-events@aaif
 ```
 
-`marketplace add aaif/meetups` reads `.claude-plugin/marketplace.json` from this
+`marketplace add aaif/events` reads `.claude-plugin/marketplace.json` from this
 repo; `@aaif` is the marketplace name. After installing, the skills auto‑activate
 when you describe a matching task (e.g. “draft the announcement post for our July
-meetup”), or invoke one explicitly with `/aaif-<skill>` (e.g.
+event”), or invoke one explicitly with `/aaif-<skill>` (e.g.
 `/aaif-announcement-post`).
 
 ### Quickstart (step‑by‑step)
 
 Prefer the guided UI flow? Run these inside Claude Code:
 
-1. **Add the marketplace** (the full git URL is equivalent to the `aaif/meetups`
+1. **Add the marketplace** (the full git URL is equivalent to the `aaif/events`
    shorthand used in [Install](#install-claude-code) above):
    ```bash
-   /plugin marketplace add https://github.com/aaif/meetups.git#main
+   /plugin marketplace add https://github.com/aaif/events.git#main
    ```
 2. **Enable it:** run `/plugin`, tab to **Marketplaces**, and enable the **aaif**
    marketplace.
 3. **Turn on auto‑update** for the marketplace so you always get the latest skills.
 4. **Install the plugin:** in that marketplace, browse plugins and install
-   **aaif‑meetups**.
+   **aaif‑events**.
 5. **Reload:**
    ```bash
    /reload-plugins
@@ -58,7 +58,7 @@ Pure writing skills. They take the event details you give them and produce copy.
 | Skill | What it writes |
 |---|---|
 | `aaif-announcement-post` | LinkedIn launch post for when RSVPs open |
-| `aaif-carousel-copy` | 6‑slide LinkedIn carousel announcing a meetup |
+| `aaif-carousel-copy` | 6‑slide LinkedIn carousel announcing an event |
 | `aaif-luma-description` | Luma event‑page description |
 | `aaif-speaker-invite` | Warm speaker‑invite DM / email |
 | `aaif-speaker-bio` | 60–80 word speaker bio + one‑liner |
@@ -175,10 +175,10 @@ The repo root is **both** the marketplace and the single plugin — the marketpl
 entry's `source` is `"./"`, so there's no extra `plugins/<name>/` nesting.
 
 ```
-meetups/
+events/
 ├── .claude-plugin/
 │   ├── marketplace.json          # one-plugin marketplace ("aaif")
-│   └── plugin.json               # plugin manifest (aaif-meetups)
+│   └── plugin.json               # plugin manifest (aaif-events)
 ├── skills/
 │   ├── aaif-announcement-post/SKILL.md
 │   ├── aaif-create-chapter/{SKILL.md, scripts/}

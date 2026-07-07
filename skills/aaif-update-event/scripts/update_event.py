@@ -7,7 +7,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "lib"))
-from aaif_meetups import office, tracker  # noqa: E402
+from aaif_events import office, tracker  # noqa: E402
 
 STALE_ON_DATE = ["square banner", "Luma cover", "announcement post",
                  "carousel", "day-of slides", "attendee reminder"]
