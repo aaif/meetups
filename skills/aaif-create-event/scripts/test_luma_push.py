@@ -2,6 +2,7 @@
 import pathlib
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import luma_push  # noqa: E402
@@ -36,6 +37,21 @@ class TestAlreadyPushed(unittest.TestCase):
         self.assertIsNone(luma_push.already_pushed(view("luma.com/aaif-sanfrancisco")))
         self.assertIsNone(luma_push.already_pushed(view("")))
         self.assertIsNone(luma_push.already_pushed(view("TBD")))
+
+    def test_connected_aaif_event_slug_counts_as_pushed(self):
+        # event pages may use aaif- slugs too — the entity lookup, not the slug,
+        # decides, so an aaif- event page must NOT bypass the duplicate-create abort
+        with mock.patch.object(luma_push.luma, "resolve_event_id", return_value="evt-1"):
+            self.assertEqual(
+                luma_push.already_pushed(view("https://luma.com/aaif-sf-evalnight"),
+                                         connected=True),
+                "https://luma.com/aaif-sf-evalnight")
+
+    def test_connected_calendar_link_does_not(self):
+        with mock.patch.object(luma_push.luma, "resolve_event_id",
+                               side_effect=luma_push.luma.NotAnEventUrl("calendar")):
+            self.assertIsNone(luma_push.already_pushed(view("luma.com/aaif-sanfrancisco"),
+                                                       connected=True))
 
 
 if __name__ == "__main__":

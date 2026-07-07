@@ -36,12 +36,26 @@ def parse_host(spec):
     return email, level, name
 
 
-def already_pushed(view):
-    """The LUMA URL cell holds an event page link (not the aaif- calendar link)."""
+def already_pushed(view, connected=False):
+    """The LUMA URL cell holds an event page link (not the chapter calendar link).
+
+    The template pre-fills the chapter calendar link (an aaif- slug), but event
+    pages may use aaif- slugs too (--slug aaif-sf-evalnight). When connected,
+    the entity lookup decides; offline, fall back to the slug heuristic — safe,
+    because --create requires the key and so always takes the lookup path.
+    """
     cell = (view["details"].get("LUMA URL") or "").strip()
-    if not cell or "aaif-" in cell.lower():
+    if not cell or not ("luma.com/" in cell.lower() or "lu.ma/" in cell.lower()):
         return None
-    return cell if ("luma.com/" in cell.lower() or "lu.ma/" in cell.lower()) else None
+    if connected:
+        try:
+            luma.resolve_event_id(cell)
+            return cell
+        except luma.NotAnEventUrl:
+            return None
+        except luma.LumaError:
+            pass   # lookup unreachable — fall back to the heuristic
+    return None if "aaif-" in cell.lower() else cell
 
 
 def show_proposal(payload, hosts, cover, key_ok):
@@ -89,12 +103,12 @@ def main():
                                  description_md=description, slug=a.slug)
     hosts = [parse_host(h) for h in a.host]
 
-    pushed = already_pushed(view)
+    key_ok = luma.available()
+    pushed = already_pushed(view, connected=key_ok)
     if pushed and not a.force:
         sys.exit("ABORT: this event's LUMA URL is already %r — it looks pushed. "
                  "Use aaif-update-event to change it, or --force to create anyway." % pushed)
 
-    key_ok = luma.available()
     show_proposal(payload, hosts, a.cover, key_ok)
     if not a.create:
         if key_ok:

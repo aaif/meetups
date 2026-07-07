@@ -26,10 +26,13 @@ def find_event_id(view, override):
     if not cell:
         sys.exit("ABORT: the tracker's LUMA URL field is empty — push the event first "
                  "(aaif-create-event) or pass --event-id.")
-    if "aaif-" in cell.lower():
-        sys.exit("ABORT: LUMA URL holds the chapter calendar link (%r), not an event "
-                 "page. Pass --event-id or the event's own URL." % cell)
-    return luma.resolve_event_id(cell)
+    # No slug heuristic here: event pages may use aaif- slugs too, so let the
+    # entity lookup decide what the URL points at (only called when connected).
+    try:
+        return luma.resolve_event_id(cell)
+    except luma.NotAnEventUrl:
+        sys.exit("ABORT: LUMA URL doesn't point to an event page (%r) — likely the "
+                 "chapter calendar link. Pass --event-id or the event's own URL." % cell)
 
 
 def fmt(v):

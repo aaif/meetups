@@ -39,12 +39,18 @@ def stats_for_tracker(docx, event_filter):
     for ref in refs:
         view = tracker.view_event(ref)
         cell = (view["details"].get("LUMA URL") or "").strip()
-        if not cell or "aaif-" in cell.lower():
+        if not cell:
             print("== %s ==\n  (no event page in LUMA URL — not pushed to Luma yet)"
                   % view["title"])
             continue
+        # Event pages may use aaif- slugs, so the entity lookup — not the slug —
+        # decides whether the cell holds an event page or the calendar link.
         try:
             live = luma.get_event(luma.resolve_event_id(cell))
+        except luma.NotAnEventUrl:
+            print("== %s ==\n  (LUMA URL doesn't point to an event page — not pushed "
+                  "to Luma yet)" % view["title"])
+            continue
         except luma.LumaError as e:
             print("== %s ==\n  !! %s" % (view["title"], e))
             continue

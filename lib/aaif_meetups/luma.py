@@ -36,6 +36,10 @@ class LumaError(RuntimeError):
     pass
 
 
+class NotAnEventUrl(LumaError):
+    """The URL/slug resolves to a non-event entity (e.g. a chapter calendar)."""
+
+
 # ---------------------------------------------------------------------------
 # Auth + transport
 # ---------------------------------------------------------------------------
@@ -44,9 +48,12 @@ def api_key():
     k = os.environ.get("LUMA_API_KEY", "").strip()
     if k:
         return k
-    r = subprocess.run(["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
-                       capture_output=True, text=True)
-    if r.returncode == 0 and r.stdout.strip():
+    try:
+        r = subprocess.run(["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
+                           capture_output=True, text=True)
+    except OSError:   # no `security` CLI (non-macOS) — no keychain to read
+        r = None
+    if r is not None and r.returncode == 0 and r.stdout.strip():
         return r.stdout.strip()
     raise LumaError(
         "No Luma API key found. Create one in the calendar's settings (Luma Plus, "
@@ -150,9 +157,9 @@ def resolve_event_id(url_or_slug):
     slug = slug_of_url(url_or_slug)
     ent = lookup_slug(slug).get("entity") or {}
     if ent.get("type") != "event":
-        raise LumaError("slug %r is a %s, not an event (chapter calendar links "
-                        "can't be synced — pass the event page URL)"
-                        % (slug, ent.get("type") or "unknown entity"))
+        raise NotAnEventUrl("slug %r is a %s, not an event (chapter calendar links "
+                            "can't be synced — pass the event page URL)"
+                            % (slug, ent.get("type") or "unknown entity"))
     ev = ent.get("event") or {}
     event_id = ev.get("id") or ev.get("api_id")
     if not event_id:

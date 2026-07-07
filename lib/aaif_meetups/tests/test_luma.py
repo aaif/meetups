@@ -27,6 +27,14 @@ class TestAvailable(unittest.TestCase):
                            return_value=mock.Mock(returncode=1, stdout="")):
             self.assertFalse(luma.available())
 
+    def test_missing_security_binary_means_not_connected_not_raising(self):
+        # non-macOS: the `security` CLI doesn't exist at all
+        with mock.patch.dict("os.environ", {"LUMA_API_KEY": ""}), \
+                mock.patch("subprocess.run", side_effect=FileNotFoundError("security")):
+            self.assertFalse(luma.available())
+            with self.assertRaises(luma.LumaError):
+                luma.api_key()
+
 
 class TestSlugOfUrl(unittest.TestCase):
     def test_forms(self):
