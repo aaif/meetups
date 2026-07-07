@@ -215,9 +215,10 @@ def lat2y(lat):
 # are dragged WEST to nearly Tokyo's x, so a separable lon/lat projection can't
 # place East-Asia/Oceania. (Tokyo itself IS placed correctly by the linear
 # formula and needs no override — it's only the landmark showing how far west the
-# others land.) Shanghai (~121°E) lands ~10px out to sea by the linear formula —
-# nudged west onto the Chinese coast. Keep a per-city pixel override table for the
-# cities that need it.
+# others land.) Separately, Shanghai (~121°E) IS placed almost correctly by the
+# linear formula but lands ~8px offshore; its override only nudges it west onto the
+# Chinese coast — a small cosmetic fix, not the gross Oceania distortion above.
+# Keep a per-city pixel override table for the cities that need it.
 PIXEL_OVERRIDES = {"Seoul": (822, 305), "Sydney": (870, 512), "Melbourne": (836, 543),
                    "Shanghai": (833, 330)}
 
@@ -486,6 +487,10 @@ def main():
     if latlon:
         src = "override" if (a.lat is not None and a.lon is not None) else "geocoded"
         print("Coords: %.4f, %.4f (%s)" % (latlon[0], latlon[1], src))
+        if name in PIXEL_OVERRIDES:
+            print("Note: %s has a fixed pixel override for the slide-5 map dot; the "
+                  "coordinates above do NOT position it (and --lat/--lon are ignored "
+                  "for placement)." % name)
     else:
         print("Coords: --")
         print("WARNING: could not resolve coordinates for %r; the slide-5 map dot "

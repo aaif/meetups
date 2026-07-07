@@ -102,6 +102,14 @@ class TestProjection(unittest.TestCase):
         self.assertEqual(cc.project_city("Seoul", 0.0, 0.0), (822, 305))
         self.assertEqual(cc.project_city("Sydney", 99.0, 99.0), (870, 512))
 
+    def test_every_override_pixel_is_within_the_map(self):
+        # A transposed or fat-fingered override (e.g. (3833, 330)) would place the
+        # dot off-canvas and be placed silently. Guard the whole table at once.
+        w, h = cc.MAP_PX
+        for city, (x, y) in cc.PIXEL_OVERRIDES.items():
+            self.assertTrue(0 <= x <= w, "%s x=%d out of 0..%d" % (city, x, w))
+            self.assertTrue(0 <= y <= h, "%s y=%d out of 0..%d" % (city, y, h))
+
     def test_lat2y_hits_every_anchor_exactly(self):
         for lat, y in cc.LAT_ANCHORS:
             self.assertAlmostEqual(cc.lat2y(lat), y, places=6, msg="anchor %s" % lat)
