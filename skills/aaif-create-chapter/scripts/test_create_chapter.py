@@ -238,6 +238,33 @@ class TestResolveLatlon(unittest.TestCase):
             cc.geocode_city = orig
 
 
+class TestMapDotLatlon(unittest.TestCase):
+    def test_override_city_is_placeable_without_geocoding(self):
+        # An override city (placed by name) must stay placeable even if geocoding
+        # would fail — and must NOT hit the network to decide that.
+        calls = []
+        orig = cc.geocode_city
+        cc.geocode_city = lambda name, **kw: calls.append(name) or None
+        try:
+            self.assertIsNotNone(cc.map_dot_latlon("Shanghai", None, None))
+            self.assertEqual(calls, [])   # no geocode call for a fixed-pixel city
+        finally:
+            cc.geocode_city = orig
+
+    def test_non_override_ungeocodable_still_none(self):
+        orig = cc.geocode_city
+        cc.geocode_city = lambda name, **kw: None
+        try:
+            self.assertIsNone(cc.map_dot_latlon("Tatooine", None, None))
+        finally:
+            cc.geocode_city = orig
+
+    def test_explicit_latlon_wins_even_for_override_city(self):
+        # Passing both coords short-circuits to resolve_latlon (no network), so the
+        # user's values flow through unchanged (project_city still ignores them).
+        self.assertEqual(cc.map_dot_latlon("Shanghai", 31.23, 121.47), (31.23, 121.47))
+
+
 class _FakeResp:
     def __init__(self, body):
         self._body = body.encode("utf-8") if isinstance(body, str) else body

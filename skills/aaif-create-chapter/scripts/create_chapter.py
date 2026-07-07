@@ -342,6 +342,16 @@ def resolve_latlon(name, lat, lon):
               "value and geocoding %r instead." % name)
     return geocode_city(name)
 
+def map_dot_latlon(name, lat, lon):
+    """Coordinates to feed the slide-5 map-dot placement, or None to leave the dot
+    at San Francisco. Fixed-pixel-override cities are placed by NAME (project_city
+    ignores lat/lon for them), so they're placeable WITHOUT geocoding: return a
+    sentinel instead of gating them on a network lookup that can't change where the
+    dot lands. Explicit --lat/--lon still short-circuit to resolve_latlon."""
+    if name in PIXEL_OVERRIDES and not (lat is not None and lon is not None):
+        return (0.0, 0.0)   # value unused by project_city; just marks the dot placeable
+    return resolve_latlon(name, lat, lon)
+
 # ----------------------------------------------------------------------------
 # Drive helpers (via the gws CLI)
 # ----------------------------------------------------------------------------
@@ -482,15 +492,20 @@ def main():
     print("Upper: %s" % upper)
     print("Slug : aaif-%s  ->  https://luma.com/aaif-%s" % (slug, slug))
 
-    # Coordinates for the slide-5 network-map dot (override -> geocode -> none).
-    latlon = resolve_latlon(name, a.lat, a.lon)
-    if latlon:
+    # Coordinates for the slide-5 network-map dot (explicit -> pixel-override
+    # sentinel -> geocode -> none). Fixed-pixel cities place by name, so they never
+    # get the "stays at San Francisco" warning just because geocoding was skipped.
+    pixel_override = name in PIXEL_OVERRIDES
+    latlon = map_dot_latlon(name, a.lat, a.lon)
+    if pixel_override and not (a.lat is not None and a.lon is not None):
+        print("Coords: -- (fixed pixel override for %s; lat/lon not needed)" % name)
+    elif latlon:
         src = "override" if (a.lat is not None and a.lon is not None) else "geocoded"
         print("Coords: %.4f, %.4f (%s)" % (latlon[0], latlon[1], src))
-        if name in PIXEL_OVERRIDES:
+        if pixel_override:
             print("Note: %s has a fixed pixel override for the slide-5 map dot; the "
-                  "coordinates above do NOT position it (and --lat/--lon are ignored "
-                  "for placement)." % name)
+                  "coordinates above do NOT position it (--lat/--lon ignored for "
+                  "placement)." % name)
     else:
         print("Coords: --")
         print("WARNING: could not resolve coordinates for %r; the slide-5 map dot "
