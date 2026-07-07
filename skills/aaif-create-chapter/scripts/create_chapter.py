@@ -215,8 +215,11 @@ def lat2y(lat):
 # are dragged WEST to nearly Tokyo's x, so a separable lon/lat projection can't
 # place East-Asia/Oceania. (Tokyo itself IS placed correctly by the linear
 # formula and needs no override — it's only the landmark showing how far west the
-# others land.) Keep a per-city pixel override table for the cities that need it.
-PIXEL_OVERRIDES = {"Seoul": (822, 305), "Sydney": (870, 512), "Melbourne": (836, 543)}
+# others land.) Shanghai (~121°E) lands ~10px out to sea by the linear formula —
+# nudged west onto the Chinese coast. Keep a per-city pixel override table for the
+# cities that need it.
+PIXEL_OVERRIDES = {"Seoul": (822, 305), "Sydney": (870, 512), "Melbourne": (836, 543),
+                   "Shanghai": (833, 330)}
 
 def project_city(name, lat, lon):
     """Map a city to (x, y) pixels on image18.png. Overridden cities take their
