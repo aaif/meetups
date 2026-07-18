@@ -14,11 +14,11 @@ also work in claude.ai and the Claude Agent SDK — see [Using in other tools](#
 ## Install (Claude Code)
 
 ```bash
-/plugin marketplace add aaif/events
+/plugin marketplace add aaif/community-events
 /plugin install aaif-events@aaif
 ```
 
-`marketplace add aaif/events` reads `.claude-plugin/marketplace.json` from this
+`marketplace add aaif/community-events` reads `.claude-plugin/marketplace.json` from this
 repo; `@aaif` is the marketplace name. After installing, the skills auto‑activate
 when you describe a matching task (e.g. “draft the announcement post for our July
 event”), or invoke one explicitly with `/aaif-<skill>` (e.g.
@@ -28,10 +28,10 @@ event”), or invoke one explicitly with `/aaif-<skill>` (e.g.
 
 Prefer the guided UI flow? Run these inside Claude Code:
 
-1. **Add the marketplace** (the full git URL is equivalent to the `aaif/events`
+1. **Add the marketplace** (the full git URL is equivalent to the `aaif/community-events`
    shorthand used in [Install](#install-claude-code) above):
    ```bash
-   /plugin marketplace add https://github.com/aaif/events.git#main
+   /plugin marketplace add https://github.com/aaif/community-events.git#main
    ```
 2. **Enable it:** run `/plugin`, tab to **Marketplaces**, and enable the **aaif**
    marketplace.
