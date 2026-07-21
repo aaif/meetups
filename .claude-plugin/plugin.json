@@ -8,8 +8,8 @@
     "name": "AAIF",
     "url": "https://github.com/aaif"
   },
-  "homepage": "https://github.com/aaif/events",
-  "repository": "https://github.com/aaif/events",
+  "homepage": "https://github.com/aaif/community-events",
+  "repository": "https://github.com/aaif/community-events",
   "license": "MIT",
   "keywords": ["aaif", "events", "community", "google-workspace", "luma", "linkedin"]
 }
