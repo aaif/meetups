@@ -84,6 +84,37 @@ def offsets_by_shape(path):
     return out
 
 
+class TestTransformText(unittest.TestCase):
+    """transform_text() on filename-shaped strings — short, no surrounding
+    sentence, unlike the prose paragraphs it's normally exercised against via
+    _process_paragraphs. The bare-"SF" case heuristic looks ±30 chars around
+    the match for a capitalized neighbor word, which behaves differently on a
+    short filename than on a full paragraph."""
+
+    def test_full_city_name_in_filename(self):
+        self.assertEqual(
+            cc.transform_text("San Francisco CRM.xlsx", "New York", "NEW YORK", "newyork"),
+            "New York CRM.xlsx")
+
+    def test_bare_sf_abbreviation_in_filename_title_case(self):
+        # "SF" is the only capitalized neighbor in a short filename; the
+        # heuristic must still resolve to title case (matching how "AAIF SF
+        # Kickoff" reads in prose), not upper-case "NEW YORK".
+        self.assertEqual(
+            cc.transform_text("SF Kickoff Deck.pptx", "New York", "NEW YORK", "newyork"),
+            "New York Kickoff Deck.pptx")
+
+    def test_luma_slug_in_filename(self):
+        self.assertEqual(
+            cc.transform_text("aaif-sanfrancisco-banner.png", "New York", "NEW YORK", "newyork"),
+            "aaif-newyork-banner.png")
+
+    def test_filename_with_no_source_tokens_is_unchanged(self):
+        self.assertEqual(
+            cc.transform_text("About.docx", "New York", "NEW YORK", "newyork"),
+            "About.docx")
+
+
 class TestProjection(unittest.TestCase):
     def test_sf_selfcheck_matches_real_deck(self):
         # Ground truth: the real San Francisco chapter deck's dot sits at exactly
@@ -321,6 +352,45 @@ class TestGeocodeCity(unittest.TestCase):
     def test_missing_lat_lon_fields_is_none(self):
         self._patch(lambda req, timeout=0: _FakeResp('[{"name":"somewhere"}]'))
         self.assertIsNone(cc.geocode_city("Paris"))
+
+
+class TestRebrandWorksheetInlineStrings(unittest.TestCase):
+    """Regression test for the xl/worksheets/sheetN.xml branch of rebrand_part:
+    cells can hold an inline string (<is><t>...</t></is>) instead of a
+    sharedStrings.xml reference, e.g. the CRM's "Guide" sheet title — those
+    were previously left untouched by the rebrand engine."""
+
+    SHEET_XML = (
+        '<worksheet><sheetData><row r="2">'
+        '<c r="B2" t="inlineStr"><is><t>AAIF SF — Attendee CRM</t></is></c>'
+        '</row></sheetData></worksheet>'
+    )
+
+    def test_inline_string_cell_is_rebranded(self):
+        out = cc.rebrand_part("xl/worksheets/sheet2.xml", self.SHEET_XML.encode("utf-8"),
+                              "New York", "NEW YORK", "newyork")
+        text = out.decode("utf-8")
+        self.assertIn("AAIF New York — Attendee CRM", text)
+        self.assertNotIn(">AAIF SF", text)
+
+    def test_rels_lookalike_is_handled_by_the_rels_branch_not_worksheets(self):
+        # "sheet2.xml.rels" does NOT match the xl/worksheets/sheet\d+.xml$ regex
+        # (it ends in ".rels"), so it's routed to the existing `.rels` elif
+        # instead - which does its own (unrelated) Luma-slug substitution. This
+        # fixture has no slug for that branch to touch, so the bytes are
+        # unchanged, but via the .rels path, not because worksheets/*.rels is
+        # inert - rebrand_part has no truly-inert branch for anything under
+        # xl/worksheets/, so this only proves the two regexes don't collide.
+        out = cc.rebrand_part("xl/worksheets/_rels/sheet2.xml.rels",
+                              self.SHEET_XML.encode("utf-8"), "New York", "NEW YORK", "newyork")
+        self.assertEqual(out, self.SHEET_XML.encode("utf-8"))
+
+    def test_unrelated_part_type_is_left_untouched(self):
+        # A genuinely unhandled OOXML part (falls through every elif to the
+        # final `else: return data`) must come back byte-for-byte identical.
+        out = cc.rebrand_part("xl/drawings/drawing1.xml",
+                              self.SHEET_XML.encode("utf-8"), "New York", "NEW YORK", "newyork")
+        self.assertEqual(out, self.SHEET_XML.encode("utf-8"))
 
 
 if __name__ == "__main__":

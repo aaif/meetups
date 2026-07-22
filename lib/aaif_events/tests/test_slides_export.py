@@ -1,0 +1,144 @@
+import unittest
+from unittest import mock
+
+from aaif_events import slides_export as se
+
+
+class TestGws(unittest.TestCase):
+    """_gws's retry contract, mirroring TestCall in test_luma.py: transient
+    errors retry, everything else fails fast. time.sleep is patched so the
+    backoff doesn't actually happen."""
+
+    def setUp(self):
+        p = mock.patch("time.sleep")
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _result(self, returncode, stdout="", stderr=""):
+        return mock.Mock(returncode=returncode, stdout=stdout, stderr=stderr)
+
+    def test_retries_transient_then_succeeds(self):
+        with mock.patch("subprocess.run",
+                        side_effect=[self._result(1, stderr="503 backendError"),
+                                     self._result(0, stdout="ok")]) as run:
+            self.assertEqual(se._gws(["gws", "x"]), "ok")
+            self.assertEqual(run.call_count, 2)
+
+    def test_non_transient_fails_immediately(self):
+        with mock.patch("subprocess.run",
+                        return_value=self._result(1, stderr="permission denied")) as run:
+            with self.assertRaises(RuntimeError) as cm:
+                se._gws(["gws", "drive", "files", "get"])
+            self.assertEqual(run.call_count, 1)
+            self.assertIn("gws drive files get", str(cm.exception))
+
+    def test_retries_exhausted_raises_with_cmd_context(self):
+        with mock.patch("subprocess.run",
+                        return_value=self._result(1, stderr="500 internalError")) as run:
+            with self.assertRaises(RuntimeError) as cm:
+                se._gws(["gws", "slides", "presentations", "get"], retries=2)
+            self.assertEqual(run.call_count, 2)
+            self.assertIn("slides presentations get", str(cm.exception))
+
+
+class TestGwsJson(unittest.TestCase):
+    def test_empty_output_raises(self):
+        with mock.patch.object(se, "_gws", return_value="   \n  "):
+            with self.assertRaises(RuntimeError) as cm:
+                se._gws_json("drive", "files", "copy")
+            self.assertIn("no JSON output", str(cm.exception))
+
+    def test_non_json_output_raises(self):
+        with mock.patch.object(se, "_gws", return_value="<html>oops</html>"):
+            with self.assertRaises(RuntimeError) as cm:
+                se._gws_json("drive", "files", "copy")
+            self.assertIn("non-JSON output", str(cm.exception))
+
+    def test_strips_keyring_backend_noise_line(self):
+        with mock.patch.object(se, "_gws", return_value='Using keyring backend: keyring\n{"id": "abc"}'):
+            self.assertEqual(se._gws_json("drive", "files", "copy"), {"id": "abc"})
+
+    def test_params_and_body_become_cli_flags(self):
+        with mock.patch("subprocess.run",
+                        return_value=mock.Mock(returncode=0, stdout="{}", stderr="")) as run:
+            se._gws_json("drive", "files", "copy", params={"fileId": "f1"}, body={"name": "n"})
+            cmd = run.call_args[0][0]
+            self.assertIn("--params", cmd)
+            self.assertIn("--json", cmd)
+
+
+class TestRenderSlidePng(unittest.TestCase):
+    """render_slide_png's orchestration, with _gws_json faked per gws subcommand
+    so no real network/CLI call happens."""
+
+    def _fake_gws_json(self, responses):
+        def fn(*args, **kwargs):
+            key = args
+            if key not in responses:
+                raise AssertionError("unexpected gws call: %r" % (args,))
+            result = responses[key]
+            if isinstance(result, Exception):
+                raise result
+            return result
+        return fn
+
+    def test_cleanup_runs_even_when_body_raises(self):
+        responses = {
+            ("drive", "files", "copy"): {"id": "pres1"},
+            ("slides", "presentations", "get"): {"slides": [{"objectId": "p1"}]},
+            ("slides", "presentations", "pages", "getThumbnail"): {"contentUrl": "https://example.invalid/x.png"},
+            ("drive", "files", "update"): {"id": "pres1"},
+        }
+        trash_calls = []
+        def fake(*args, **kwargs):
+            if args == ("drive", "files", "update"):
+                trash_calls.append(kwargs.get("params", {}).get("fileId"))
+            return self._fake_gws_json(responses)(*args, **kwargs)
+
+        with mock.patch.object(se, "_gws_json", side_effect=fake), \
+                mock.patch("urllib.request.urlretrieve"), \
+                mock.patch("os.path.getsize", return_value=10):  # < 1000 -> triggers the raise
+            with self.assertRaises(RuntimeError) as cm:
+                se.render_slide_png("file1", "/tmp/out.png")
+            self.assertIn("suspiciously small", str(cm.exception))
+
+        # cleanup (trash) must still have run against the copy it made, even
+        # though the function body raised.
+        self.assertEqual(trash_calls, ["pres1"])
+
+    def test_no_cleanup_attempted_when_copy_itself_fails(self):
+        with mock.patch.object(se, "_gws_json", side_effect=RuntimeError("copy failed")) as gj:
+            with self.assertRaises(RuntimeError):
+                se.render_slide_png("file1", "/tmp/out.png")
+            # only the failed copy call - no trash call, since there is no
+            # presentation_id to trash.
+            self.assertEqual(gj.call_count, 1)
+
+    def test_cleanup_failure_does_not_mask_original_exception(self):
+        responses = {
+            ("drive", "files", "copy"): {"id": "pres1"},
+            ("slides", "presentations", "get"): RuntimeError("get failed"),
+            ("drive", "files", "update"): RuntimeError("trash also failed"),
+        }
+        with mock.patch.object(se, "_gws_json", side_effect=self._fake_gws_json(responses)):
+            with self.assertRaises(RuntimeError) as cm:
+                se.render_slide_png("file1", "/tmp/out.png")
+            # the ORIGINAL failure propagates, not the cleanup failure
+            self.assertIn("get failed", str(cm.exception))
+
+    def test_successful_render_returns_out_path_and_trashes_copy(self):
+        responses = {
+            ("drive", "files", "copy"): {"id": "pres1"},
+            ("slides", "presentations", "get"): {"slides": [{"objectId": "p1"}, {"objectId": "p2"}]},
+            ("slides", "presentations", "pages", "getThumbnail"): {"contentUrl": "https://example.invalid/x.png"},
+            ("drive", "files", "update"): {"id": "pres1"},
+        }
+        with mock.patch.object(se, "_gws_json", side_effect=self._fake_gws_json(responses)), \
+                mock.patch("urllib.request.urlretrieve"), \
+                mock.patch("os.path.getsize", return_value=5000):
+            out = se.render_slide_png("file1", "/tmp/out.png", slide_index=1)
+            self.assertEqual(out, "/tmp/out.png")
+
+
+if __name__ == "__main__":
+    unittest.main()
