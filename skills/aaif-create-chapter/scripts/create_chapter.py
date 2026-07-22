@@ -111,6 +111,10 @@ def rebrand_part(part_name, data, name, upper, newslug):
         xml = _process_paragraphs(xml, "w:p", "w:t", tx)
     elif part_name == "xl/sharedStrings.xml":
         xml = _process_paragraphs(xml, "si", "t", tx)
+    elif re.match(r"xl/worksheets/sheet\d+\.xml$", part_name):
+        # Cells can hold inline strings (<is><t>...</t></is>) instead of a
+        # sharedStrings.xml reference — e.g. the CRM's "Guide" sheet title.
+        xml = _process_paragraphs(xml, "is", "t", tx)
     elif part_name in ("docProps/core.xml", "docProps/app.xml"):
         # metadata: chapter labelled "AAIF SF" -> "AAIF <UPPER>"
         xml = xml.replace("AAIF SF", "AAIF " + upper)
@@ -442,10 +446,13 @@ def clone_and_rebrand(folder_id, parent, name, ctx, indent=""):
     print("%s+ %s/" % (indent, name))
     for child in list_children(folder_id):
         cname, cid, mime = child["name"], child["id"], child["mimeType"]
+        # Names (not just file content) can carry the source city, e.g. "San
+        # Francisco CRM.xlsx" -> "New York CRM.xlsx" — same transform as content.
+        new_cname = transform_text(cname, ctx["name"], ctx["upper"], ctx["slug"])
         if mime == FOLDER:
-            clone_and_rebrand(cid, new_id, cname, ctx, indent + "  ")
+            clone_and_rebrand(cid, new_id, new_cname, ctx, indent + "  ")
         else:
-            copy_id = copy_file(cid, cname, new_id)
+            copy_id = copy_file(cid, new_cname, new_id)
             ext = os.path.splitext(cname)[1].lower()
             if ext in MIME_BY_EXT:
                 tmp = os.path.join(ctx["tmp"], "f" + copy_id + ext)
@@ -463,15 +470,15 @@ def clone_and_rebrand(folder_id, parent, name, ctx, indent=""):
                         gws_upload(copy_id, tmp, MIME_BY_EXT[ext])
                     left = residual_tokens(tmp)
                     if left:
-                        ctx["residuals"].append((cname, left))
+                        ctx["residuals"].append((new_cname, left))
                     flag = "  !! residual %s" % left if left else ""
                     dot = " +map dot" if moved else ""
-                    print("%s  - %s (%d parts%s)%s" % (indent, cname, n, dot, flag))
+                    print("%s  - %s (%d parts%s)%s" % (indent, new_cname, n, dot, flag))
                 finally:
                     if os.path.exists(tmp):
                         os.remove(tmp)
             else:
-                print("%s  - %s (copied)" % (indent, cname))
+                print("%s  - %s (copied)" % (indent, new_cname))
     return new_id
 
 def main():

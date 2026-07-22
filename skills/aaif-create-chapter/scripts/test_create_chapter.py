@@ -323,5 +323,32 @@ class TestGeocodeCity(unittest.TestCase):
         self.assertIsNone(cc.geocode_city("Paris"))
 
 
+class TestRebrandWorksheetInlineStrings(unittest.TestCase):
+    """Regression test for the xl/worksheets/sheetN.xml branch of rebrand_part:
+    cells can hold an inline string (<is><t>...</t></is>) instead of a
+    sharedStrings.xml reference, e.g. the CRM's "Guide" sheet title — those
+    were previously left untouched by the rebrand engine."""
+
+    SHEET_XML = (
+        '<worksheet><sheetData><row r="2">'
+        '<c r="B2" t="inlineStr"><is><t>AAIF SF — Attendee CRM</t></is></c>'
+        '</row></sheetData></worksheet>'
+    )
+
+    def test_inline_string_cell_is_rebranded(self):
+        out = cc.rebrand_part("xl/worksheets/sheet2.xml", self.SHEET_XML.encode("utf-8"),
+                              "New York", "NEW YORK", "newyork")
+        text = out.decode("utf-8")
+        self.assertIn("AAIF New York — Attendee CRM", text)
+        self.assertNotIn(">AAIF SF", text)
+
+    def test_unmatched_worksheet_number_pattern_is_untouched(self):
+        # part_name must match exactly "sheetN.xml" - a lookalike path (e.g. a
+        # chart or drawing part nested under worksheets/) should fall through.
+        out = cc.rebrand_part("xl/worksheets/_rels/sheet2.xml.rels",
+                              self.SHEET_XML.encode("utf-8"), "New York", "NEW YORK", "newyork")
+        self.assertEqual(out, self.SHEET_XML.encode("utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

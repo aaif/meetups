@@ -75,9 +75,17 @@ keys are per-calendar). The script detects this itself and its dry-run says so:
   key and re-run).
 
 1. **Prepare the assets**: write the page copy with `aaif-luma-description` and
-   save it as markdown; export the event banner to PNG for the cover
-   (`soffice --headless --convert-to png Banner.pptx`). Determine the city's IANA
-   timezone yourself and include it in the proposal for the user to check.
+   save it as markdown; export the event banner to PNG for the cover via the
+   Slides API — **not LibreOffice/`soffice`**, which substitutes local system
+   fonts for the deck's brand fonts and silently produces a wrong-looking export:
+   ```
+   PYTHONPATH=lib python3 -c "
+   from aaif_events.slides_export import render_slide_png
+   render_slide_png('<Banner.pptx file id>', 'banner.png', slide_index=0)
+   "
+   ```
+   Determine the city's IANA timezone yourself and include it in the proposal
+   for the user to check.
 
 2. **Propose (default, sends nothing):**
    ```
