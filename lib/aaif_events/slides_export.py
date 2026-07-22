@@ -1,13 +1,16 @@
 """Render a single slide of a Drive-hosted .pptx to PNG via the Slides API,
 instead of a local LibreOffice conversion. LibreOffice substitutes local
-system fonts for the deck's actual brand fonts, silently producing
-wrong-looking exports; Google's own renderer (used here) does not.
+system fonts for the deck's actual brand fonts whenever the render machine
+doesn't have those fonts installed (true for effectively every machine but
+the original designer's), silently producing wrong-looking exports; Google's
+own renderer (used here) does not.
 
 Requires the `gws` CLI (Drive + Slides scopes) on PATH and authenticated.
 """
 import json
 import os
 import subprocess
+import sys
 import time
 import urllib.request
 
@@ -30,7 +33,8 @@ def _gws(cmd, retries=5):
         if i < retries - 1 and any(k in msg for k in _TRANSIENT):
             time.sleep(2 * (i + 1))
             continue
-        raise RuntimeError("gws failed (%s): %s" % (r.returncode, msg.strip()[:400]))
+        raise RuntimeError("gws failed (%s) for %s: %s"
+                          % (r.returncode, " ".join(cmd)[:200], msg.strip()[:400]))
 
 
 def _gws_json(*args, params=None, body=None):
@@ -54,11 +58,13 @@ def render_slide_png(file_id, out_path, slide_index=0, thumbnail_size="WIDTH2000
     at `out_path`. Makes a throwaway Google Slides copy to render from (Slides
     thumbnails only work on native Slides files, not stored .pptx blobs) and
     trashes it afterward — the source file is never modified."""
-    copy = _gws_json("drive", "files", "copy",
-                      params={"fileId": file_id, "supportsAllDrives": True, "fields": "id"},
-                      body={"name": "TEMP - render_slide_png", "mimeType": _SLIDES_MIME})
-    presentation_id = copy["id"]
+    presentation_id = None
     try:
+        copy = _gws_json("drive", "files", "copy",
+                          params={"fileId": file_id, "supportsAllDrives": True, "fields": "id"},
+                          body={"name": "TEMP - render_slide_png", "mimeType": _SLIDES_MIME})
+        presentation_id = copy["id"]
+
         presentation = _gws_json("slides", "presentations", "get",
                                   params={"presentationId": presentation_id, "fields": "slides.objectId"})
         page_object_id = presentation["slides"][slide_index]["objectId"]
@@ -72,8 +78,19 @@ def render_slide_png(file_id, out_path, slide_index=0, thumbnail_size="WIDTH2000
             raise RuntimeError("rendered thumbnail suspiciously small (%s)" % out_path)
         return out_path
     finally:
-        try:
-            _gws_json("drive", "files", "update", params={"fileId": presentation_id, "supportsAllDrives": True},
-                      body={"trashed": True})
-        except Exception:
-            pass  # best-effort cleanup; a stray TEMP file is harmless clutter
+        # The throwaway copy has no `parents` set, so it lands in the SAME
+        # folder as the source file - not an out-of-sight scratch location.
+        # If trashing repeatedly fails and this is ever run against
+        # TemplateCity (aaif-create-chapter's own recalibration step does
+        # exactly that), a stray "TEMP - render_slide_png" file would get
+        # picked up and cloned into every subsequent chapter. Surface
+        # cleanup failures loudly instead of swallowing them silently so a
+        # stray copy gets noticed and trashed by hand.
+        if presentation_id is not None:
+            try:
+                _gws_json("drive", "files", "update",
+                          params={"fileId": presentation_id, "supportsAllDrives": True},
+                          body={"trashed": True})
+            except Exception as e:
+                print("WARNING: could not trash temp Slides copy %s: %s" % (presentation_id, e),
+                      file=sys.stderr)
